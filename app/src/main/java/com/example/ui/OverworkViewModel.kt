@@ -1,6 +1,7 @@
 package com.example.ui
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.*
@@ -27,19 +28,47 @@ data class JournalRow(
 
 class OverworkViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: OverworkRepository
-
-    init {
-        val database = OverworkDatabase.getDatabase(application)
-        repository = OverworkRepository(database.overworkDao())
-    }
+    private val sharedPrefs = application.getSharedPreferences("overwork_journal_prefs", Context.MODE_PRIVATE)
 
     // List of all employees
-    val employees: StateFlow<List<Employee>> = repository.allEmployees
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val employees: StateFlow<List<Employee>> = repositoryAllEmployeesFlow()
 
     // Currently selected employee
     private val _selectedEmployee = MutableStateFlow<Employee?>(null)
     val selectedEmployee: StateFlow<Employee?> = _selectedEmployee.asStateFlow()
+
+    // Current navigation screen (acting like persisted URL route/localStorage state)
+    private val _currentScreen = MutableStateFlow<Screen>(Screen.Employees)
+    val currentScreen: StateFlow<Screen> = _currentScreen.asStateFlow()
+
+    private fun repositoryAllEmployeesFlow(): StateFlow<List<Employee>> {
+        return repository.allEmployees
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+
+    init {
+        val database = OverworkDatabase.getDatabase(application)
+        repository = OverworkRepository(database.overworkDao())
+
+        // Load saved state (simulating web's localStorage persistence)
+        val savedEmployeeId = sharedPrefs.getInt("selected_employee_id", -1)
+        val savedScreenRoute = sharedPrefs.getString("current_screen", Screen.Employees.route) ?: Screen.Employees.route
+
+        _currentScreen.value = when (savedScreenRoute) {
+            Screen.Journal.route -> Screen.Journal
+            Screen.Info.route -> Screen.Info
+            else -> Screen.Employees
+        }
+
+        if (savedEmployeeId != -1) {
+            viewModelScope.launch {
+                val employee = repository.getEmployeeById(savedEmployeeId)
+                if (employee != null) {
+                    _selectedEmployee.value = employee
+                }
+            }
+        }
+    }
 
     // Logs of the selected employee
     val selectedEmployeeLogs: StateFlow<List<WeeklyLog>> = _selectedEmployee
@@ -63,9 +92,16 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
     }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // --- Navigation Screen Actions ---
+    fun setCurrentScreen(screen: Screen) {
+        _currentScreen.value = screen
+        sharedPrefs.edit().putString("current_screen", screen.route).apply()
+    }
+
     // --- Employee Actions ---
     fun selectEmployee(employee: Employee?) {
         _selectedEmployee.value = employee
+        sharedPrefs.edit().putInt("selected_employee_id", employee?.id ?: -1).apply()
     }
 
     fun addEmployee(name: String, position: String, employeeNumber: String, initialBalance: Double) {

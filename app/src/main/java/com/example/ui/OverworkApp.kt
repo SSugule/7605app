@@ -50,109 +50,166 @@ sealed class Screen(val route: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OverworkApp(viewModel: OverworkViewModel) {
-    var currentScreen by remember { mutableStateOf<Screen>(Screen.Employees) }
+    val currentScreen by viewModel.currentScreen.collectAsStateWithLifecycle()
     val employees by viewModel.employees.collectAsStateWithLifecycle()
     val selectedEmployee by viewModel.selectedEmployee.collectAsStateWithLifecycle()
 
     var showAddEmployeeDialog by remember { mutableStateOf(false) }
     var employeeToEdit by remember { mutableStateOf<Employee?>(null) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isWideScreen = maxWidth >= 600.dp
+
+        Row(modifier = Modifier.fillMaxSize()) {
+            if (isWideScreen) {
+                NavigationRail(
+                    containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
+                    header = {
                         Icon(
                             imageVector = Icons.Default.Timeline,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(end = 8.dp)
+                            modifier = Modifier.padding(vertical = 16.dp)
                         )
-                        Text(
-                            text = "Учёт переработок",
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground
+                    },
+                    modifier = Modifier.testTag("side_nav_rail")
+                ) {
+                    NavigationRailItem(
+                        selected = currentScreen == Screen.Employees,
+                        onClick = { viewModel.setCurrentScreen(Screen.Employees) },
+                        icon = { Icon(Icons.Default.People, contentDescription = "Сотрудники") },
+                        label = { Text("Сотрудники") },
+                        modifier = Modifier.testTag("nav_employees_tab")
+                    )
+                    NavigationRailItem(
+                        selected = currentScreen == Screen.Journal,
+                        onClick = { viewModel.setCurrentScreen(Screen.Journal) },
+                        icon = { Icon(Icons.Default.Assignment, contentDescription = "Журнал") },
+                        label = { Text("Журнал") },
+                        modifier = Modifier.testTag("nav_journal_tab")
+                    )
+                    NavigationRailItem(
+                        selected = currentScreen == Screen.Info,
+                        onClick = { viewModel.setCurrentScreen(Screen.Info) },
+                        icon = { Icon(Icons.Default.HelpCenter, contentDescription = "Правила") },
+                        label = { Text("Правила") },
+                        modifier = Modifier.testTag("nav_info_tab")
+                    )
+                }
+            }
+
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (!isWideScreen) {
+                                    Icon(
+                                        imageVector = Icons.Default.Timeline,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(end = 8.dp)
+                                    )
+                                }
+                                Text(
+                                    text = "Учёт переработок",
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
+                                if (isWideScreen && selectedEmployee != null) {
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Text(
+                                        text = "• Журнал: ${selectedEmployee?.name}",
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
+                        )
+                    )
+                },
+                bottomBar = {
+                    if (!isWideScreen) {
+                        NavigationBar(
+                            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
+                            modifier = Modifier.testTag("bottom_nav_bar")
+                        ) {
+                            NavigationBarItem(
+                                selected = currentScreen == Screen.Employees,
+                                onClick = { viewModel.setCurrentScreen(Screen.Employees) },
+                                icon = { Icon(Icons.Default.People, contentDescription = "Сотрудники") },
+                                label = { Text("Сотрудники") },
+                                modifier = Modifier.testTag("nav_employees_tab")
+                            )
+                            NavigationBarItem(
+                                selected = currentScreen == Screen.Journal,
+                                onClick = { viewModel.setCurrentScreen(Screen.Journal) },
+                                icon = { Icon(Icons.Default.Assignment, contentDescription = "Журнал") },
+                                label = { Text("Журнал" + (if (selectedEmployee != null) " (${selectedEmployee?.name?.take(7)}...)" else "")) },
+                                modifier = Modifier.testTag("nav_journal_tab")
+                            )
+                            NavigationBarItem(
+                                selected = currentScreen == Screen.Info,
+                                onClick = { viewModel.setCurrentScreen(Screen.Info) },
+                                icon = { Icon(Icons.Default.HelpCenter, contentDescription = "Правила") },
+                                label = { Text("Правила") },
+                                modifier = Modifier.testTag("nav_info_tab")
+                            )
+                        }
+                    }
+                },
+                floatingActionButton = {
+                    if (currentScreen == Screen.Employees) {
+                        ExtendedFloatingActionButton(
+                            text = { Text("Добавить", fontWeight = FontWeight.SemiBold) },
+                            icon = { Icon(Icons.Default.PersonAdd, contentDescription = "Добавить сотрудника") },
+                            onClick = { showAddEmployeeDialog = true },
+                            modifier = Modifier.testTag("add_employee_fab")
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
-                )
-            )
-        },
-        bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
-                modifier = Modifier.testTag("bottom_nav_bar")
-            ) {
-                NavigationBarItem(
-                    selected = currentScreen == Screen.Employees,
-                    onClick = { currentScreen = Screen.Employees },
-                    icon = { Icon(Icons.Default.People, contentDescription = "Сотрудники") },
-                    label = { Text("Сотрудники") },
-                    modifier = Modifier.testTag("nav_employees_tab")
-                )
-                NavigationBarItem(
-                    selected = currentScreen == Screen.Journal,
-                    onClick = { currentScreen = Screen.Journal },
-                    icon = { Icon(Icons.Default.Assignment, contentDescription = "Журнал") },
-                    label = { Text("Журнал" + (if (selectedEmployee != null) " (${selectedEmployee?.name?.take(7)}...)" else "")) },
-                    modifier = Modifier.testTag("nav_journal_tab")
-                )
-                NavigationBarItem(
-                    selected = currentScreen == Screen.Info,
-                    onClick = { currentScreen = Screen.Info },
-                    icon = { Icon(Icons.Default.HelpCenter, contentDescription = "Правила") },
-                    label = { Text("Правила") },
-                    modifier = Modifier.testTag("nav_info_tab")
-                )
-            }
-        },
-        floatingActionButton = {
-            if (currentScreen == Screen.Employees) {
-                ExtendedFloatingActionButton(
-                    text = { Text("Добавить", fontWeight = FontWeight.SemiBold) },
-                    icon = { Icon(Icons.Default.PersonAdd, contentDescription = "Добавить сотрудника") },
-                    onClick = { showAddEmployeeDialog = true },
-                    modifier = Modifier.testTag("add_employee_fab")
-                )
-            }
-        },
-        containerColor = MaterialTheme.colorScheme.background
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            when (currentScreen) {
-                Screen.Employees -> {
-                    EmployeesScreen(
-                        employees = employees,
-                        onSelectEmployee = { emp ->
-                            viewModel.selectEmployee(emp)
-                            currentScreen = Screen.Journal
-                        },
-                        onEditEmployee = { emp ->
-                            employeeToEdit = emp
-                            showAddEmployeeDialog = true
-                        },
-                        onDeleteEmployee = { emp ->
-                            viewModel.deleteEmployee(emp)
+                containerColor = MaterialTheme.colorScheme.background
+            ) { innerPadding ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                ) {
+                    when (currentScreen) {
+                        Screen.Employees -> {
+                            EmployeesScreen(
+                                employees = employees,
+                                isWideScreen = isWideScreen,
+                                onSelectEmployee = { emp ->
+                                    viewModel.selectEmployee(emp)
+                                    viewModel.setCurrentScreen(Screen.Journal)
+                                },
+                                onEditEmployee = { emp ->
+                                    employeeToEdit = emp
+                                    showAddEmployeeDialog = true
+                                },
+                                onDeleteEmployee = { emp ->
+                                    viewModel.deleteEmployee(emp)
+                                }
+                            )
                         }
-                    )
-                }
-                Screen.Journal -> {
-                    JournalScreen(
-                        selectedEmployee = selectedEmployee,
-                        viewModel = viewModel,
-                        onChangeEmployee = {
-                            currentScreen = Screen.Employees
+                        Screen.Journal -> {
+                            JournalScreen(
+                                selectedEmployee = selectedEmployee,
+                                viewModel = viewModel,
+                                isWideScreen = isWideScreen,
+                                onChangeEmployee = {
+                                    viewModel.setCurrentScreen(Screen.Employees)
+                                }
+                            )
                         }
-                    )
-                }
-                Screen.Info -> {
-                    InfoScreen()
+                        Screen.Info -> {
+                            InfoScreen(isWideScreen = isWideScreen)
+                        }
+                    }
                 }
             }
         }
@@ -187,6 +244,7 @@ fun OverworkApp(viewModel: OverworkViewModel) {
 @Composable
 fun EmployeesScreen(
     employees: List<Employee>,
+    isWideScreen: Boolean,
     onSelectEmployee: (Employee) -> Unit,
     onEditEmployee: (Employee) -> Unit,
     onDeleteEmployee: (Employee) -> Unit
@@ -222,29 +280,60 @@ fun EmployeesScreen(
             )
         }
     } else {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .testTag("employees_list"),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-                Text(
-                    text = "Сотрудники (${employees.size})",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.padding(bottom = 4.dp, start = 4.dp)
-                )
+        if (isWideScreen) {
+            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(minSize = 340.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag("employees_grid"),
+                contentPadding = PaddingValues(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        text = "Сотрудники (${employees.size})",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.padding(bottom = 4.dp, start = 4.dp)
+                    )
+                }
+                items(employees.size, key = { index -> employees[index].id }) { index ->
+                    val employee = employees[index]
+                    EmployeeCard(
+                        employee = employee,
+                        onClick = { onSelectEmployee(employee) },
+                        onEdit = { onEditEmployee(employee) },
+                        onDelete = { onDeleteEmployee(employee) }
+                    )
+                }
             }
-            items(employees, key = { it.id }) { employee ->
-                EmployeeCard(
-                    employee = employee,
-                    onClick = { onSelectEmployee(employee) },
-                    onEdit = { onEditEmployee(employee) },
-                    onDelete = { onDeleteEmployee(employee) }
-                )
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag("employees_list"),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    Text(
+                        text = "Сотрудники (${employees.size})",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.padding(bottom = 4.dp, start = 4.dp)
+                    )
+                }
+                items(employees, key = { it.id }) { employee ->
+                    EmployeeCard(
+                        employee = employee,
+                        onClick = { onSelectEmployee(employee) },
+                        onEdit = { onEditEmployee(employee) },
+                        onDelete = { onDeleteEmployee(employee) }
+                    )
+                }
             }
         }
     }
@@ -438,6 +527,7 @@ fun EmployeeDialog(
 fun JournalScreen(
     selectedEmployee: Employee?,
     viewModel: OverworkViewModel,
+    isWideScreen: Boolean,
     onChangeEmployee: () -> Unit
 ) {
     if (selectedEmployee == null) {
@@ -598,21 +688,44 @@ fun JournalScreen(
             } else {
                 if (viewModeTab == 0) {
                     // List View (Cards showing dynamic breakdown)
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(rows) { row ->
-                            WeeklyBreakdownCard(
-                                row = row,
-                                onEdit = {
-                                    journalLogToEdit = row.log
-                                    selectedWeekMonday = row.log.startDate
-                                    showAddJournalDialog = true
-                                },
-                                onDelete = { viewModel.deleteWeeklyLog(row.log) }
-                            )
+                    if (isWideScreen) {
+                        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                            columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(minSize = 360.dp),
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            items(rows.size, key = { index -> rows[index].log.id }) { index ->
+                                val row = rows[index]
+                                WeeklyBreakdownCard(
+                                    row = row,
+                                    onEdit = {
+                                        journalLogToEdit = row.log
+                                        selectedWeekMonday = row.log.startDate
+                                        showAddJournalDialog = true
+                                    },
+                                    onDelete = { viewModel.deleteWeeklyLog(row.log) }
+                                )
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(rows) { row ->
+                                WeeklyBreakdownCard(
+                                    row = row,
+                                    onEdit = {
+                                        journalLogToEdit = row.log
+                                        selectedWeekMonday = row.log.startDate
+                                        showAddJournalDialog = true
+                                    },
+                                    onDelete = { viewModel.deleteWeeklyLog(row.log) }
+                                )
+                            }
                         }
                     }
                 } else {
@@ -1207,7 +1320,7 @@ fun WeeklyScheduleDialog(
 
 // --- Info Screen (Russian Rules & Designation guide) ---
 @Composable
-fun InfoScreen() {
+fun InfoScreen(isWideScreen: Boolean) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -1228,58 +1341,119 @@ fun InfoScreen() {
             )
         }
 
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("📋 Обозначения рабочей нагрузки", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.height(10.dp))
-                    
-                    RatingItem(symbol = "Р", desc = "Рабочий день сверх продолжительности. В будни равен 7 часам работы. В праздничные и выходные равен 4 часам.")
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
-                    RatingItem(symbol = "ВГ", desc = "Наряд ВГ. Стандартный суточный караул. В будни списывается как 30 часов, в выходные/праздники — 29 часов.")
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
-                    RatingItem(symbol = "П1", desc = "Наряд П1. Списывается аналогично ВГ: в будни равен 30 часам, в выходные/праздники — 29 часам.")
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
-                    RatingItem(symbol = "Ф", desc = "Наряд Ф. Отработанное суточное время: в будни начисляется 28 часов, в выходные/праздники — 27 часов.")
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
-                    RatingItem(symbol = "В", desc = "Выходной сотрудника. Считается как 8 часов отдыха, зачисляется в Колонку 10, а дата пишется в Колонку 9.")
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
-                    RatingItem(symbol = "—", desc = "Прочерк (Смена закрыта). Обозначает посленарядный отдых (например, после суточного дежурства со среды на четверг). 0 часов работы.")
+        if (isWideScreen) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("📋 Обозначения рабочей нагрузки", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.height(10.dp))
+                            
+                            RatingItem(symbol = "Р", desc = "Рабочий день сверх продолжительности. В будни равен 7 часам работы. В праздничные и выходные равен 4 часам.")
+                            Divider(modifier = Modifier.padding(vertical = 8.dp))
+                            RatingItem(symbol = "ВГ", desc = "Наряд ВГ. Стандартный суточный караул. В будни списывается как 30 часов, в выходные/праздники — 29 часов.")
+                            Divider(modifier = Modifier.padding(vertical = 8.dp))
+                            RatingItem(symbol = "П1", desc = "Наряд П1. Списывается аналогично ВГ: в будни равен 30 часам, в выходные/праздники — 29 часам.")
+                            Divider(modifier = Modifier.padding(vertical = 8.dp))
+                            RatingItem(symbol = "Ф", desc = "Наряд Ф. Отработанное суточное время: в будни начисляется 28 часов, в выходные/праздники — 27 часов.")
+                            Divider(modifier = Modifier.padding(vertical = 8.dp))
+                            RatingItem(symbol = "В", desc = "Выходной сотрудника. Считается как 8 часов отдыха, зачисляется в Колонку 10, а дата пишется в Колонку 9.")
+                            Divider(modifier = Modifier.padding(vertical = 8.dp))
+                            RatingItem(symbol = "—", desc = "Прочерк (Смена закрыта). Обозначает посленарядный отдых (например, после суточного дежурства со среды на четверг). 0 часов работы.")
+                        }
+                    }
+
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("⚖️ Законы и правила вычислений", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
+                            
+                            Text(
+                                text = "1. Норма еженедельной работы: 40 часов.\n" +
+                                       "Все часы работы (Колонка 8), отработанные поверх 40 часов в неделю, автоматически рассчитываются как переработка и идут в Колонку 6, а затем суммируются в итоговый нереализованный баланс (Колонка 13).",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            
+                            Text(
+                                text = "2. Месячная норма выходных дней: 6 дней.\n" +
+                                       "В соответствии с правилами, если сотрудник берет более 6 выходных дней («В») в течении одного календарного месяца, за каждый выходной день сверх нормы (начиная с 7-го) списывается ровно 8 часов из накопленной переработки (Колонка 13). Списание производится автоматически в логе той недели, на которую пришелся лишний выходной.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+
+                            Text(
+                                text = "3. Дополнительные сутки отдыха (Колонки 11-12):\n" +
+                                       "По запросу сотрудника ему могут предоставляться отгулы из накопленного пула. При заполнении Колонки 12 (например, 8, 16 часов отгула) эти часы вычитаются прямо из нереализованной переработки (Колонка 13), уменьшая долг.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
                 }
             }
-        }
+        } else {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("📋 Обозначения рабочей нагрузки", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.height(10.dp))
+                        
+                        RatingItem(symbol = "Р", desc = "Рабочий день сверх продолжительности. В будни равен 7 часам работы. В праздничные и выходные равен 4 часам.")
+                        Divider(modifier = Modifier.padding(vertical = 8.dp))
+                        RatingItem(symbol = "ВГ", desc = "Наряд ВГ. Стандартный суточный караул. В будни списывается как 30 часов, в выходные/праздники — 29 часов.")
+                        Divider(modifier = Modifier.padding(vertical = 8.dp))
+                        RatingItem(symbol = "П1", desc = "Наряд П1. Списывается аналогично ВГ: в будни равен 30 часам, в выходные/праздники — 29 часам.")
+                        Divider(modifier = Modifier.padding(vertical = 8.dp))
+                        RatingItem(symbol = "Ф", desc = "Наряд Ф. Отработанное суточное время: в будни начисляется 28 часов, в выходные/праздники — 27 часов.")
+                        Divider(modifier = Modifier.padding(vertical = 8.dp))
+                        RatingItem(symbol = "В", desc = "Выходной сотрудника. Считается как 8 часов отдыха, зачисляется в Колонку 10, а дата пишется в Колонку 9.")
+                        Divider(modifier = Modifier.padding(vertical = 8.dp))
+                        RatingItem(symbol = "—", desc = "Прочерк (Смена закрыта). Обозначает посленарядный отдых (например, после суточного дежурства со среды на четверг). 0 часов работы.")
+                    }
+                }
+            }
 
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("⚖️ Законы и правила вычислений", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
-                    
-                    Text(
-                        text = "1. Норма еженедельной работы: 40 часов.\n" +
-                               "Все часы работы (Колонка 8), отработанные поверх 40 часов в неделю, автоматически рассчитываются как переработка и идут в Колонку 6, а затем суммируются в итоговый нереализованный баланс (Колонка 13).",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    
-                    Text(
-                        text = "2. Месячная норма выходных дней: 6 дней.\n" +
-                               "В соответствии с правилами, если сотрудник берет более 6 выходных дней («В») в течении одного календарного месяца, за каждый выходной день сверх нормы (начиная с 7-го) списывается ровно 8 часов из накопленной переработки (Колонка 13). Списание производится автоматически в логе той недели, на которую пришелся лишний выходной.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("⚖️ Законы и правила вычислений", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
+                        
+                        Text(
+                            text = "1. Норма еженедельной работы: 40 часов.\n" +
+                                   "Все часы работы (Колонка 8), отработанные поверх 40 часов в неделю, автоматически рассчитываются как переработка и идут в Колонку 6, а затем суммируются в итоговый нереализованный баланс (Колонка 13).",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        
+                        Text(
+                            text = "2. Месячная норма выходных дней: 6 дней.\n" +
+                                   "В соответствии с правилами, если сотрудник берет более 6 выходных дней («В») в течении одного календарного месяца, за каждый выходной день сверх нормы (начиная с 7-го) списывается ровно 8 часов из накопленной переработки (Колонка 13). Списание производится автоматически в логе той недели, на которую пришелся лишний выходной.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
 
-                    Text(
-                        text = "3. Дополнительные сутки отдыха (Колонки 11-12):\n" +
-                               "По запросу сотрудника ему могут предоставляться отгулы из накопленного пула. При заполнении Колонки 12 (например, 8, 16 часов отгула) эти часы вычитаются прямо из нереализованной переработки (Колонка 13), уменьшая долг.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                        Text(
+                            text = "3. Дополнительные сутки отдыха (Колонки 11-12):\n" +
+                                   "По запросу сотрудника ему могут предоставляться отгулы из накопленного пула. При заполнении Колонки 12 (например, 8, 16 часов отгула) эти часы вычитаются прямо из нереализованной переработки (Колонка 13), уменьшая долг.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             }
         }
