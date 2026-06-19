@@ -119,3 +119,14 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
 }
+
+tasks.register<Copy>("copyApkToRoot") {
+    group = "build"
+    description = "Copies the compiled debug APK to the project installer directory."
+    dependsOn("assembleDebug")
+    
+    from(layout.buildDirectory.dir("outputs/apk/debug").map { it.file("app-debug.apk") })
+    into(file("${rootDir}/installer"))
+    rename { "app-installer.apk" }
+}
+
