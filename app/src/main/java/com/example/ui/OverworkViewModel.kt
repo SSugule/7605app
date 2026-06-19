@@ -31,6 +31,13 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
     private val repository: OverworkRepository = OverworkRepository(OverworkDatabase.getDatabase(application).overworkDao())
     private val sharedPrefs = application.getSharedPreferences("overwork_journal_prefs", Context.MODE_PRIVATE)
 
+    // GitHub repository configuration for updates
+    val githubOwner = MutableStateFlow(sharedPrefs.getString("github_owner", "super-souls2018") ?: "super-souls2018")
+    val githubRepo = MutableStateFlow(sharedPrefs.getString("github_repo", "overwork-journal") ?: "overwork-journal")
+
+    val updateManager = UpdateManager(application)
+    val updateState: StateFlow<UpdateState> = updateManager.updateState
+
     // List of all employees
     val employees: StateFlow<List<Employee>> = repositoryAllEmployeesFlow()
 
@@ -83,6 +90,10 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
                     _selectedEmployee.value = employee
                 }
             }
+        }
+
+        viewModelScope.launch {
+            updateManager.checkForUpdates(githubOwner.value, githubRepo.value)
         }
     }
 
@@ -275,5 +286,38 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
         val today = LocalDate.now()
         val monday = today.with(DayOfWeek.MONDAY)
         return monday.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+    }
+
+    fun setGithubConfig(owner: String, repo: String) {
+        githubOwner.value = owner.trim()
+        githubRepo.value = repo.trim()
+        sharedPrefs.edit()
+            .putString("github_owner", owner.trim())
+            .putString("github_repo", repo.trim())
+            .apply()
+    }
+
+    fun checkForUpdates() {
+        viewModelScope.launch {
+            updateManager.checkForUpdates(githubOwner.value, githubRepo.value)
+        }
+    }
+
+    fun downloadAndInstallUpdate(downloadUrl: String) {
+        viewModelScope.launch {
+            updateManager.downloadAndInstall(downloadUrl)
+        }
+    }
+
+    fun installApk(file: java.io.File) {
+        updateManager.installApk(file)
+    }
+
+    fun resetUpdateState() {
+        updateManager.resetToIdle()
+    }
+    
+    fun getAppVersion(): String {
+        return updateManager.getCurrentVersion()
     }
 }

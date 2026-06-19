@@ -1,5 +1,5 @@
 {
-  "name": "Журнал переработок",
+  "name": "7605",
   "description": "Автоматизированный журнал учета и расчета переработок сотрудников в соответствии с установленными нормами нагрузок.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

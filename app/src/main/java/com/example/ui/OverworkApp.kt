@@ -53,6 +53,7 @@ fun OverworkApp(viewModel: OverworkViewModel) {
     val currentScreen by viewModel.currentScreen.collectAsStateWithLifecycle()
     val employeesbyBalance by viewModel.employeesWithBalance.collectAsStateWithLifecycle()
     val selectedEmployee by viewModel.selectedEmployee.collectAsStateWithLifecycle()
+    val updateState by viewModel.updateState.collectAsStateWithLifecycle()
 
     var showAddEmployeeDialog by remember { mutableStateOf(false) }
     var employeeToEdit by remember { mutableStateOf<Employee?>(null) }
@@ -207,7 +208,7 @@ fun OverworkApp(viewModel: OverworkViewModel) {
                             )
                         }
                         Screen.Info -> {
-                            InfoScreen(isWideScreen = isWideScreen)
+                            InfoScreen(isWideScreen = isWideScreen, viewModel = viewModel)
                         }
                     }
                 }
@@ -237,6 +238,133 @@ fun OverworkApp(viewModel: OverworkViewModel) {
                 employeeToEdit = null
             }
         )
+    }
+
+    // --- Update Handler Dialog Overlay ---
+    val state = updateState
+    if (state != UpdateState.Idle && state != UpdateState.UpToDate) {
+        when (state) {
+            is UpdateState.Checking -> {
+                // Silently checks, do not block the UI
+            }
+            is UpdateState.UpdateAvailable -> {
+                AlertDialog(
+                    onDismissRequest = { viewModel.resetUpdateState() },
+                    title = { Text("🔄 Доступно обновление!") },
+                    text = {
+                        Column {
+                            Text("Обнаружена новая версия: ${state.latestVersion}", fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Изменения в этой версии:")
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 150.dp)
+                            ) {
+                                LazyColumn(
+                                    modifier = Modifier.padding(12.dp)
+                                ) {
+                                    item {
+                                        Text(
+                                            text = state.changelog.ifEmpty { "Нет описания изменений" },
+                                            fontSize = 12.sp,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = { viewModel.downloadAndInstallUpdate(state.downloadUrl) }
+                        ) {
+                            Text("Скачать и установить")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = { viewModel.resetUpdateState() }
+                        ) {
+                            Text("Позже")
+                        }
+                    }
+                )
+            }
+            is UpdateState.Downloading -> {
+                AlertDialog(
+                    onDismissRequest = { /* No dismiss */ },
+                    title = { Text("📥 Загрузка обновления...") },
+                    text = {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                            LinearProgressIndicator(
+                                progress = { state.progress },
+                                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("${(state.progress * 100).toInt()}% завершено", fontSize = 14.sp)
+                        }
+                    },
+                    confirmButton = {}
+                )
+            }
+            is UpdateState.ReadyToInstall -> {
+                LaunchedEffect(state.apkFile) {
+                    viewModel.installApk(state.apkFile)
+                }
+                
+                AlertDialog(
+                    onDismissRequest = { viewModel.resetUpdateState() },
+                    title = { Text("✅ Обновление загружено") },
+                    text = { Text("Файл обновления успешно скачан. Запустить ручную установку, если она не началась автоматически?") },
+                    confirmButton = {
+                        Button(
+                            onClick = { viewModel.installApk(state.apkFile) }
+                        ) {
+                            Text("Установить")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = { viewModel.resetUpdateState() }
+                        ) {
+                            Text("Отмена")
+                        }
+                    }
+                )
+            }
+            is UpdateState.PermissionRedirect -> {
+                AlertDialog(
+                    onDismissRequest = { viewModel.resetUpdateState() },
+                    title = { Text("⚙️ Требуется разрешение") },
+                    text = { Text("Для установки обновления необходимо разрешить установку приложений из внешних источников для этой программы.\n\nМы перенаправили вас в настройки системы. Пожалуйста, включите переключатель и попробуйте установить снова.") },
+                    confirmButton = {
+                        Button(
+                            onClick = { viewModel.resetUpdateState() }
+                        ) {
+                            Text("Понятно")
+                        }
+                    }
+                )
+            }
+            is UpdateState.Error -> {
+                AlertDialog(
+                    onDismissRequest = { viewModel.resetUpdateState() },
+                    title = { Text("❌ Ошибка обновления") },
+                    text = { Text(state.message) },
+                    confirmButton = {
+                        Button(
+                            onClick = { viewModel.resetUpdateState() }
+                        ) {
+                            Text("Закрыть")
+                        }
+                    }
+                )
+            }
+            is UpdateState.Idle, is UpdateState.UpToDate -> {
+                // Do nothing
+            }
+        }
     }
 }
 
@@ -1673,7 +1801,11 @@ fun WeeklyScheduleDialog(
 
 // --- Info Screen (Russian Rules & Designation guide) ---
 @Composable
-fun InfoScreen(isWideScreen: Boolean) {
+fun InfoScreen(isWideScreen: Boolean, viewModel: OverworkViewModel) {
+    val githubOwner by viewModel.githubOwner.collectAsStateWithLifecycle()
+    val githubRepo by viewModel.githubRepo.collectAsStateWithLifecycle()
+    val updateState by viewModel.updateState.collectAsStateWithLifecycle()
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -1692,6 +1824,160 @@ fun InfoScreen(isWideScreen: Boolean) {
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
             )
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SystemUpdate,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Автоматическое обновление",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    Text(
+                        text = "Сравните текущую установленную версию приложения с выпусками на GitHub, при наличии обновы APK скачается и установится автоматически.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    var ownerInput by remember(githubOwner) { mutableStateOf(githubOwner) }
+                    var repoInput by remember(githubRepo) { mutableStateOf(githubRepo) }
+                    val currentAppVersion = viewModel.getAppVersion()
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Установленная версия:", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Box(
+                            modifier = Modifier
+                                .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "v$currentAppVersion",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+
+                    Text("Репозиторий обновлений на GitHub:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = ownerInput,
+                            onValueChange = {
+                                ownerInput = it
+                                viewModel.setGithubConfig(it, repoInput)
+                            },
+                            label = { Text("Владелец (Owner)") },
+                            modifier = Modifier.weight(1f).testTag("update_owner_input"),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = repoInput,
+                            onValueChange = {
+                                repoInput = it
+                                viewModel.setGithubConfig(ownerInput, it)
+                            },
+                            label = { Text("Репозиторий (Repo)") },
+                            modifier = Modifier.weight(1f).testTag("update_repo_input"),
+                            singleLine = true
+                        )
+                    }
+
+                    when (val state = updateState) {
+                        is UpdateState.Checking -> {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Проверка версий на GitHub...", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        is UpdateState.UpToDate -> {
+                            Text("✨ У вас установлена актуальная версия приложения!", fontSize = 12.sp, color = Emerald600, fontWeight = FontWeight.Medium)
+                        }
+                        is UpdateState.UpdateAvailable -> {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("🚀 Найдена новая версия: ${state.latestVersion}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                    Text("Нажмите кнопку ниже для быстрой автоматической установки.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Button(
+                                        onClick = { viewModel.downloadAndInstallUpdate(state.downloadUrl) },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("Скачать и обновить (${state.latestVersion})")
+                                    }
+                                }
+                            }
+                        }
+                        is UpdateState.Downloading -> {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("📥 Загрузка файла (${(state.progress * 100).toInt()}%)...", fontSize = 12.sp)
+                                LinearProgressIndicator(
+                                    progress = { state.progress },
+                                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp))
+                                )
+                            }
+                        }
+                        is UpdateState.ReadyToInstall -> {
+                            Button(
+                                onClick = { viewModel.installApk(state.apkFile) },
+                                colors = ButtonDefaults.buttonColors(containerColor = Emerald600),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Запустить установку APK")
+                            }
+                        }
+                        is UpdateState.Error -> {
+                            Text("❌ Не удалось обновиться: ${state.message}", fontSize = 12.sp, color = Rose500)
+                        }
+                        else -> {
+                            // Idle state
+                        }
+                    }
+
+                    Button(
+                        onClick = { viewModel.checkForUpdates() },
+                        modifier = Modifier.fillMaxWidth().testTag("check_updates_btn")
+                    ) {
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Проверить обновления сейчас")
+                    }
+                }
+            }
         }
 
         if (isWideScreen) {
