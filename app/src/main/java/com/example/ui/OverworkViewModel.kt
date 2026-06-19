@@ -106,6 +106,12 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
             updateManager.checkForUpdates(githubOwner.value, githubRepo.value)
         }
 
+        viewModelScope.launch {
+            if (hasPendingCrash.value && githubToken.value.isNotEmpty()) {
+                sendPendingCrashReportSilently()
+            }
+        }
+
         // Prepopulate default duty rules if database is empty
         viewModelScope.launch {
             repository.allDutyRules.take(1).collect { existingRules ->
@@ -345,6 +351,129 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
             .putString("github_owner", owner.trim())
             .putString("github_repo", repo.trim())
             .apply()
+    }
+
+    val githubToken = MutableStateFlow(sharedPrefs.getString("github_token", "") ?: "")
+    val hasPendingCrash = MutableStateFlow(CrashReporter.hasPendingCrash(application))
+    val pendingCrashDetails = MutableStateFlow(CrashReporter.getPendingCrashDetails(application))
+    val crashReportSending = MutableStateFlow(false)
+    val crashReportSendStatus = MutableStateFlow<String?>(null)
+
+    fun setGithubToken(token: String) {
+        githubToken.value = token.trim()
+        sharedPrefs.edit().putString("github_token", token.trim()).apply()
+        
+        // Auto-submit crash if they just inputted a valid token
+        if (hasPendingCrash.value && token.trim().isNotEmpty()) {
+            sendPendingCrashReport()
+        }
+    }
+
+    fun clearPendingCrashReport() {
+        CrashReporter.clearPendingCrash(getApplication())
+        hasPendingCrash.value = false
+        pendingCrashDetails.value = null
+        crashReportSendStatus.value = null
+    }
+
+    private suspend fun sendPendingCrashReportSilently() {
+        val app = getApplication<Application>()
+        val token = githubToken.value
+        val owner = githubOwner.value
+        val repo = githubRepo.value
+        val rawJson = CrashReporter.getPendingCrashRawJson(app) ?: return
+
+        val result = CrashReporter.sendReportToGithub(
+            context = app,
+            owner = owner,
+            repo = repo,
+            token = token,
+            throwable = null,
+            isFatal = true,
+            contextInfo = "Automatic startup upload of fatal crash",
+            customJsonStr = rawJson
+        )
+        if (result.isSuccess) {
+            CrashReporter.clearPendingCrash(app)
+            hasPendingCrash.value = false
+            pendingCrashDetails.value = null
+        }
+    }
+
+    fun sendPendingCrashReport() {
+        viewModelScope.launch {
+            crashReportSending.value = true
+            crashReportSendStatus.value = null
+            
+            val app = getApplication<Application>()
+            val token = githubToken.value
+            val owner = githubOwner.value
+            val repo = githubRepo.value
+            val rawJson = CrashReporter.getPendingCrashRawJson(app)
+            
+            if (rawJson == null) {
+                crashReportSending.value = false
+                crashReportSendStatus.value = "Ошибка: Отчет о сбое не найден."
+                return@launch
+            }
+            
+            if (token.isEmpty()) {
+                crashReportSending.value = false
+                crashReportSendStatus.value = "Ошибка: GitHub токен отсутствует в настройках."
+                return@launch
+            }
+
+            val result = CrashReporter.sendReportToGithub(
+                context = app,
+                owner = owner,
+                repo = repo,
+                token = token,
+                throwable = null,
+                isFatal = true,
+                contextInfo = "Manual upload of fatal crash",
+                customJsonStr = rawJson
+            )
+            
+            crashReportSending.value = false
+            if (result.isSuccess) {
+                CrashReporter.clearPendingCrash(app)
+                hasPendingCrash.value = false
+                pendingCrashDetails.value = null
+                crashReportSendStatus.value = "Успех! Отчёт отправлен: ${result.getOrNull()}"
+            } else {
+                crashReportSendStatus.value = "Ошибка отправки: ${result.exceptionOrNull()?.message}"
+            }
+        }
+    }
+
+    fun reportHandledError(throwable: Throwable, contextInfo: String) {
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val token = githubToken.value
+            val owner = githubOwner.value
+            val repo = githubRepo.value
+            
+            if (token.isNotEmpty()) {
+                CrashReporter.sendReportToGithub(
+                    context = app,
+                    owner = owner,
+                    repo = repo,
+                    token = token,
+                    throwable = throwable,
+                    isFatal = false,
+                    contextInfo = contextInfo
+                )
+            } else {
+                // Save locally so the user knows an error occurred
+                CrashReporter.saveCrashLocally(app, throwable, false, contextInfo)
+                hasPendingCrash.value = true
+                pendingCrashDetails.value = CrashReporter.getPendingCrashDetails(app)
+            }
+        }
+    }
+
+    fun triggerManualCrash() {
+        throw RuntimeException("Ручной тест: Сбой приложения, вызванный пользователем для проверки работы системы сбора крашей.")
     }
 
     fun checkForUpdates() {

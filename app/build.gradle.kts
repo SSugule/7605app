@@ -122,21 +122,31 @@ dependencies {
 
 tasks.register("copyApkToRoot") {
     group = "build"
-    description = "Copies the compiled debug APK directly to the project root directory."
+    description = "Copies the compiled debug APK to all installer locations of the project."
     dependsOn("assembleDebug")
     
     val src = layout.buildDirectory.file("outputs/apk/debug/app-debug.apk")
-    val dest = layout.projectDirectory.file("app-installer.apk")
+    val dest1 = layout.projectDirectory.file("app-installer.apk")
+    val dest2 = layout.projectDirectory.file("../app-installer.apk")
+    val dest3 = layout.projectDirectory.file("../installer/app-installer.apk")
     
     inputs.file(src)
-    outputs.file(dest)
+    outputs.files(dest1, dest2, dest3)
     
     doLast {
         val srcFile = src.get().asFile
-        val destFile = dest.asFile
         if (srcFile.exists()) {
-            srcFile.copyTo(destFile, overwrite = true)
-            println("APK successfully copied to root: ${destFile.absolutePath}")
+            val d1 = dest1.asFile
+            srcFile.copyTo(d1, overwrite = true)
+            println("APK successfully copied to folder: ${d1.absolutePath}")
+
+            val d2 = dest2.asFile
+            srcFile.copyTo(d2, overwrite = true)
+            println("APK successfully copied to root: ${d2.absolutePath}")
+
+            val d3 = dest3.asFile
+            srcFile.copyTo(d3, overwrite = true)
+            println("APK successfully copied to installer folder: ${d3.absolutePath}")
         } else {
             throw GradleException("Source APK not found at ${srcFile.absolutePath}")
         }

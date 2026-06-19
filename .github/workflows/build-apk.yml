@@ -1,0 +1,74 @@
+name: Build and Update APK
+
+on:
+  push:
+    branches:
+      - '**'
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+
+permissions: write-all
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'zulu'
+          cache: 'gradle'
+
+      - name: Decode Keystore
+        run: |
+          if [ -f "debug.keystore.base64" ]; then
+            base64 -d debug.keystore.base64 > debug.keystore
+            echo "Keystore successfully decoded!"
+          else
+            echo "Warning: debug.keystore.base64 not found!"
+          fi
+
+      - name: Add execution permission to gradlew
+        run: chmod +x gradlew
+
+      - name: Build and Copy APKs
+        run: ./gradlew assembleDebug copyApkToRoot
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-installer-apk
+          path: app-installer.apk
+
+      - name: Update APK files in repository
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add app-installer.apk installer/app-installer.apk app/app-installer.apk
+          if ! git diff-index --quiet HEAD --; then
+            git commit -m "chore: auto-update compiled app-installer.apk [skip ci]"
+            git push origin HEAD:${{ github.ref }} || echo "Could not push back to branch (might be protected). Skipping push."
+          else
+            echo "No changes to APK files. Skipping commit."
+          fi
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref_name == 'main' || github.ref_name == 'master'
+        with:
+          tag_name: latest
+          name: Latest Build
+          draft: false
+          prerelease: true
+          files: app-installer.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

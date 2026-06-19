@@ -1,21 +1,51 @@
+# 📊 Учёт переработок "7605"
+
+Автоматизированный офлайн-журнал учета и точного расчета переработок сотрудников в соответствии с установленными нормами нагрузок.
+
+---
+
+## 📥 Установка приложения (Скачать APK)
+
+Для установки приложения на мобильное устройство Android нажмите на кнопку под этим текстом:
+
 <div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
+  <a href="https://github.com/super-souls2018/overwork-journal/raw/main/app-installer.apk">
+    <img src="https://img.shields.io/badge/Скачать_APK-Установить_на_Android-green?style=for-the-badge&logo=android&logoColor=white" alt="Скачать APK" height="50">
+  </a>
 </div>
 
-# Run and deploy your AI Studio app
+<br>
 
-This contains everything you need to run your app locally.
+> **💡 Альтернативная ссылка:** Если графическая кнопка выше не отображается или не нажимается, скачайте напрямую по этой ссылке:  
+> 👉 **[Скачать app-installer.apk напрямую](https://github.com/super-souls2018/overwork-journal/raw/main/app-installer.apk)** 👈
 
-View your app in AI Studio: https://ai.studio/apps/b8e77a9d-be13-414f-aedd-6bdcc10832b4
+---
 
-## Run Locally
+## 🌟 Основные возможности приложения
 
-**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
+* **Автоматический расчёт 13 колонок ведомости:** Полная автоматизация расчётов еженедельной и месячной переработки, а также итогового нереализованного времени (Колонка 13) сотрудников.
+* **Контроль нормы выходных дней:** Автоматическое списание переработанных часов (по 8 часов за каждый день) при превышении лимита в 6 выходных дней («В») за один календарный месяц.
+* **Дополнительные сутки отдыха:** Отражение отгулов из накопленного пула сотрудников с мгновенным перерасчетом баланса.
+* **Автоматическое обновление:** Быстрая проверка последних версий на GitHub и скачивание/установка обновлений непосредственно в приложении.
+* **Автоматический сбор ошибок и краш-репортинг:** Интеллектуальный сбор отчётов о сбоях, вылетах, багах и крашах с автоматической фоновой отправкой в репозиторий GitHub (через Personal Access Token) или ручной отправкой в 1 клик.
 
+---
 
-1. Open Android Studio
-2. Select **Open** and choose the directory containing this project
-3. Allow Android Studio to fix any incompatibilities as it imports the project.
-4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
-5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
-6. Run the app on an emulator or physical device
+## 🛠️ Сбор ошибок и краш-репортинг
+
+В приложение встроена продвинутая система отслеживания стабильности:
+1. **Автоматический перехват крашей:** Любые uncaught exceptions сохраняются во внутреннее хранилище в момент сбоя.
+2. **Отправка в GitHub:** 
+   * **Автоматически:** Если в настройках на странице справки указан ваш личный GitHub токен (PAT), при следующем запуске приложения после сбоя подробный отчёт (включая stacktrace, версию Android и модель устройства) автоматически создастся в качестве Issue в вашем репозитории.
+   * **Вручную (свободный режим):** Если токен не настроен, приложение отобразит карточку со сведениями об ошибке и предложит отправить её на GitHub через браузер с автоматически заполненными полями.
+
+---
+
+## 🛠️ Разработчикам / Сборка
+
+Приложение разработано на современном стеке **Jetpack Compose / Kotlin** с соблюдением стандартов Google Material Design 3.
+
+* **IDE:** Android Studio
+* **Минимальная версия SDK:** API 26 (Android 8.0)
+* **Целевая версия SDK:** API 34 (Android 14)
+* **База данных:** Room Database (SQLite)
