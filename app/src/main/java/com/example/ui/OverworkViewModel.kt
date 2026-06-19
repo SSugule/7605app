@@ -33,6 +33,24 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
     // List of all employees
     val employees: StateFlow<List<Employee>> = repositoryAllEmployeesFlow()
 
+    // Flows of employee state mapped with their current dynamically calculated Column 13 overwork balance.
+    val employeesWithBalance: StateFlow<List<Pair<Employee, Double>>> = combine(
+        repository.allEmployees,
+        repository.allWeeklyLogs
+    ) { employeeList, logsList ->
+        employeeList.map { employee ->
+            val empLogs = logsList.filter { it.employeeId == employee.id }.sortedBy { it.startDate }
+            val balance = if (empLogs.isEmpty()) {
+                employee.initialBalance
+            } else {
+                val calculatedRows = computeChronologicalLogs(employee, empLogs)
+                calculatedRows.lastOrNull()?.col13 ?: employee.initialBalance
+            }
+            Pair(employee, balance)
+        }
+    }
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // Currently selected employee
     private val _selectedEmployee = MutableStateFlow<Employee?>(null)
     val selectedEmployee: StateFlow<Employee?> = _selectedEmployee.asStateFlow()
@@ -139,7 +157,8 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
         loads: List<String>,
         holidays: List<Boolean>,
         additionalRestDate: String = "",
-        additionalRestHours: Double = 0.0
+        additionalRestHours: Double = 0.0,
+        col13Override: Double? = null
     ) {
         viewModelScope.launch {
             val existing = repository.getWeeklyLogByDate(employeeId, startDate)
@@ -162,7 +181,8 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
                 satHoliday = holidays.getOrElse(5) { true },
                 sunHoliday = holidays.getOrElse(6) { true },
                 additionalRestDaysDate = additionalRestDate,
-                additionalRestDaysHours = additionalRestHours
+                additionalRestDaysHours = additionalRestHours,
+                col13Override = col13Override
             )
             repository.insertWeeklyLog(log)
         }
@@ -212,7 +232,11 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
             val col6 = log.calculateWeeklyOvertimeHours()
             val col12 = log.additionalRestDaysHours
             
-            runningOvertimeBalance = runningOvertimeBalance + col6 - col12 - penaltyThisWeek
+            if (log.col13Override != null) {
+                runningOvertimeBalance = log.col13Override
+            } else {
+                runningOvertimeBalance = runningOvertimeBalance + col6 - col12 - penaltyThisWeek
+            }
             
             rows.add(
                 JournalRow(

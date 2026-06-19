@@ -51,7 +51,7 @@ sealed class Screen(val route: String) {
 @Composable
 fun OverworkApp(viewModel: OverworkViewModel) {
     val currentScreen by viewModel.currentScreen.collectAsStateWithLifecycle()
-    val employees by viewModel.employees.collectAsStateWithLifecycle()
+    val employeesbyBalance by viewModel.employeesWithBalance.collectAsStateWithLifecycle()
     val selectedEmployee by viewModel.selectedEmployee.collectAsStateWithLifecycle()
 
     var showAddEmployeeDialog by remember { mutableStateOf(false) }
@@ -181,7 +181,7 @@ fun OverworkApp(viewModel: OverworkViewModel) {
                     when (currentScreen) {
                         Screen.Employees -> {
                             EmployeesScreen(
-                                employees = employees,
+                                employees = employeesbyBalance,
                                 isWideScreen = isWideScreen,
                                 onSelectEmployee = { emp ->
                                     viewModel.selectEmployee(emp)
@@ -240,10 +240,19 @@ fun OverworkApp(viewModel: OverworkViewModel) {
     }
 }
 
+// Helper function to format hour values nicely and drop trailing zero
+fun formatHours(value: Double): String {
+    return if (value % 1.0 == 0.0) {
+        value.toInt().toString()
+    } else {
+        value.toString()
+    }
+}
+
 // --- Employees Screen ---
 @Composable
 fun EmployeesScreen(
-    employees: List<Employee>,
+    employees: List<Pair<Employee, Double>>,
     isWideScreen: Boolean,
     onSelectEmployee: (Employee) -> Unit,
     onEditEmployee: (Employee) -> Unit,
@@ -299,10 +308,11 @@ fun EmployeesScreen(
                         modifier = Modifier.padding(bottom = 4.dp, start = 4.dp)
                     )
                 }
-                items(employees.size, key = { index -> employees[index].id }) { index ->
-                    val employee = employees[index]
+                items(employees.size, key = { index -> employees[index].first.id }) { index ->
+                    val (employee, balance) = employees[index]
                     EmployeeCard(
                         employee = employee,
+                        balance = balance,
                         onClick = { onSelectEmployee(employee) },
                         onEdit = { onEditEmployee(employee) },
                         onDelete = { onDeleteEmployee(employee) }
@@ -326,9 +336,10 @@ fun EmployeesScreen(
                         modifier = Modifier.padding(bottom = 4.dp, start = 4.dp)
                     )
                 }
-                items(employees, key = { it.id }) { employee ->
+                items(employees, key = { it.first.id }) { (employee, balance) ->
                     EmployeeCard(
                         employee = employee,
+                        balance = balance,
                         onClick = { onSelectEmployee(employee) },
                         onEdit = { onEditEmployee(employee) },
                         onDelete = { onDeleteEmployee(employee) }
@@ -342,6 +353,7 @@ fun EmployeesScreen(
 @Composable
 fun EmployeeCard(
     employee: Employee,
+    balance: Double,
     onClick: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
@@ -384,7 +396,7 @@ fun EmployeeCard(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "Таб №: ${employee.employeeNumber} • ${employee.position}",
+                    text = "${employee.employeeNumber} • ${employee.position}",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     maxLines = 1,
@@ -400,7 +412,7 @@ fun EmployeeCard(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Баланс: ${employee.initialBalance} ч.",
+                        text = "Переработка: ${formatHours(balance)} ч.",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Emerald600
@@ -450,8 +462,10 @@ fun EmployeeDialog(
 ) {
     var name by remember { mutableStateOf(employee?.name ?: "") }
     var position by remember { mutableStateOf(employee?.position ?: "") }
-    var num by remember { mutableStateOf(employee?.employeeNumber ?: "") }
+    var num by remember { mutableStateOf(employee?.employeeNumber ?: "Рядовой") }
     var initialBalanceStr by remember { mutableStateOf(employee?.initialBalance?.toString() ?: "0.0") }
+    var expandedRank by remember { mutableStateOf(false) }
+    val ranksList = listOf("Старший прапорщик", "Прапорщик", "Старший сержант", "Сержант", "Младший сержант", "Ефрейтор", "Рядовой")
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -485,14 +499,41 @@ fun EmployeeDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("employee_pos_input")
                 )
-                OutlinedTextField(
-                    value = num,
-                    onValueChange = { num = it },
-                    label = { Text("Табельный номер") },
-                    placeholder = { Text("1042") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().testTag("employee_num_input")
-                )
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = num,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Звание") },
+                        trailingIcon = {
+                            Icon(
+                                imageVector = if (expandedRank) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                contentDescription = "Выбрать звание"
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("employee_num_input")
+                    )
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable { expandedRank = true }
+                    )
+                    DropdownMenu(
+                        expanded = expandedRank,
+                        onDismissRequest = { expandedRank = false },
+                        modifier = Modifier.fillMaxWidth(0.9f)
+                    ) {
+                        ranksList.forEach { rank ->
+                            DropdownMenuItem(
+                                text = { Text(rank) },
+                                onClick = {
+                                    num = rank
+                                    expandedRank = false
+                                }
+                            )
+                        }
+                    }
+                }
                 OutlinedTextField(
                     value = initialBalanceStr,
                     onValueChange = { initialBalanceStr = it },
@@ -574,6 +615,49 @@ fun JournalScreen(
     var journalLogToEdit by remember { mutableStateOf<WeeklyLog?>(null) }
     var viewModeTab by remember { mutableStateOf(0) } // 0 = Карточки (Интерактивный), 1 = Таблица (13 колонок)
 
+    val currentDeviceYear = LocalDate.now().year
+    var journalSectionTab by remember { mutableStateOf(0) } // 0 = Текущий год, 1 = Архив
+    var selectedFilterMonth by remember { mutableStateOf<Int?>(null) } // null = Все
+    var selectedFilterYear by remember { mutableStateOf<Int?>(null) } // null = Все
+
+    val archiveYears = remember(rows) {
+        rows.mapNotNull { row ->
+            try { LocalDate.parse(row.log.startDate).year } catch(e: Exception) { null }
+        }
+        .filter { it != currentDeviceYear }
+        .distinct()
+        .sortedDescending()
+    }
+
+    val filteredRows = remember(rows, journalSectionTab, selectedFilterMonth, selectedFilterYear) {
+        rows.filter { row ->
+            val localDate = try { LocalDate.parse(row.log.startDate) } catch(e: Exception) { null }
+            if (localDate == null) {
+                journalSectionTab == 0
+            } else {
+                val matchesSection = if (journalSectionTab == 0) {
+                    localDate.year == currentDeviceYear
+                } else {
+                    localDate.year != currentDeviceYear
+                }
+                
+                val matchesMonth = if (selectedFilterMonth == null) {
+                    true
+                } else {
+                    localDate.monthValue == selectedFilterMonth
+                }
+                
+                val matchesYear = if (journalSectionTab == 0 || selectedFilterYear == null) {
+                    true
+                } else {
+                    localDate.year == selectedFilterYear
+                }
+                
+                matchesSection && matchesMonth && matchesYear
+            }
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         // --- Employee Quick Header ---
         Surface(
@@ -595,7 +679,7 @@ fun JournalScreen(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "${selectedEmployee.position} • Таб: ${selectedEmployee.employeeNumber}",
+                        text = "${selectedEmployee.position} • ${selectedEmployee.employeeNumber}",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
@@ -604,6 +688,115 @@ fun JournalScreen(
                     Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Сменить")
+                }
+            }
+        }
+
+        // --- Current Year vs Archive Section Selector ---
+        TabRow(
+            selectedTabIndex = journalSectionTab,
+            modifier = Modifier.fillMaxWidth(),
+            containerColor = MaterialTheme.colorScheme.surface,
+            divider = {}
+        ) {
+            Tab(
+                selected = journalSectionTab == 0,
+                onClick = { 
+                    journalSectionTab = 0
+                    selectedFilterMonth = null
+                    selectedFilterYear = null
+                },
+                text = { Text("Текущий год ($currentDeviceYear)", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+            )
+            Tab(
+                selected = journalSectionTab == 1,
+                onClick = { 
+                    journalSectionTab = 1
+                    selectedFilterMonth = null
+                    selectedFilterYear = null
+                },
+                text = { Text("Архив", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+            )
+        }
+
+        // --- Filters Bar ---
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+            tonalElevation = 1.dp
+        ) {
+            Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                // Months list scrollable
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Месяц:", 
+                        fontSize = 11.sp, 
+                        fontWeight = FontWeight.Bold, 
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+                    val monthsList = listOf(
+                        Pair(null, "Все"),
+                        Pair(1, "Янв"),
+                        Pair(2, "Фев"),
+                        Pair(3, "Мар"),
+                        Pair(4, "Апр"),
+                        Pair(5, "Май"),
+                        Pair(6, "Июн"),
+                        Pair(7, "Июл"),
+                        Pair(8, "Авг"),
+                        Pair(9, "Сен"),
+                        Pair(10, "Окт"),
+                        Pair(11, "Ноя"),
+                        Pair(12, "Дек")
+                    )
+                    monthsList.forEach { (mCode, mName) ->
+                        FancyFilterChip(
+                            selected = selectedFilterMonth == mCode,
+                            onClick = { selectedFilterMonth = mCode },
+                            label = mName
+                        )
+                    }
+                }
+
+                // Years list scrollable (only for Archive)
+                if (journalSectionTab == 1 && archiveYears.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Год:", 
+                            fontSize = 11.sp, 
+                            fontWeight = FontWeight.Bold, 
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(end = 12.dp)
+                        )
+                        FancyFilterChip(
+                            selected = selectedFilterYear == null,
+                            onClick = { selectedFilterYear = null },
+                            label = "Все"
+                        )
+                        archiveYears.forEach { yr ->
+                            FancyFilterChip(
+                                selected = selectedFilterYear == yr,
+                                onClick = { selectedFilterYear = yr },
+                                label = "$yr г."
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -644,7 +837,20 @@ fun JournalScreen(
             }
 
             Button(
-                onClick = { showAddJournalDialog = true },
+                onClick = { 
+                    val newestLog = rows.firstOrNull()?.log
+                    if (newestLog != null) {
+                        try {
+                            val lastMonday = LocalDate.parse(newestLog.startDate)
+                            selectedWeekMonday = lastMonday.plusWeeks(1).toString()
+                        } catch(e: Exception) {
+                            selectedWeekMonday = viewModel.getMondayOfCurrentWeek()
+                        }
+                    } else {
+                        selectedWeekMonday = viewModel.getMondayOfCurrentWeek()
+                    }
+                    showAddJournalDialog = true 
+                },
                 shape = RoundedCornerShape(8.dp),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 modifier = Modifier.testTag("add_weekly_log_button")
@@ -685,6 +891,34 @@ fun JournalScreen(
                         textAlign = TextAlign.Center
                     )
                 }
+            } else if (filteredRows.isEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FilterList,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f),
+                        modifier = Modifier.size(72.dp)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Нет записей по выбранным деталям",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Попробуйте изменить выбранный месяц или год фильтрации.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+                        textAlign = TextAlign.Center
+                    )
+                }
             } else {
                 if (viewModeTab == 0) {
                     // List View (Cards showing dynamic breakdown)
@@ -696,8 +930,8 @@ fun JournalScreen(
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            items(rows.size, key = { index -> rows[index].log.id }) { index ->
-                                val row = rows[index]
+                            items(filteredRows.size, key = { index -> filteredRows[index].log.id }) { index ->
+                                val row = filteredRows[index]
                                 WeeklyBreakdownCard(
                                     row = row,
                                     onEdit = {
@@ -715,7 +949,7 @@ fun JournalScreen(
                             contentPadding = PaddingValues(16.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            items(rows) { row ->
+                            items(filteredRows) { row ->
                                 WeeklyBreakdownCard(
                                     row = row,
                                     onEdit = {
@@ -731,7 +965,7 @@ fun JournalScreen(
                 } else {
                     // Document Spreadsheet table view (mimics the 13 columns log printed sheet)
                     JournalTable(
-                        rows = rows,
+                        rows = filteredRows,
                         employee = selectedEmployee,
                         onEdit = { row ->
                             journalLogToEdit = row.log
@@ -754,14 +988,15 @@ fun JournalScreen(
                 showAddJournalDialog = false
                 journalLogToEdit = null
             },
-            onSave = { weekDate, loads, holidays, addRestDate, addRestHours ->
+            onSave = { weekDate, loads, holidays, addRestDate, addRestHours, col13Override ->
                 viewModel.saveWeeklyLog(
                     employeeId = selectedEmployee.id,
                     startDate = weekDate,
                     loads = loads,
                     holidays = holidays,
                     additionalRestDate = addRestDate,
-                    additionalRestHours = addRestHours
+                    additionalRestHours = addRestHours,
+                    col13Override = col13Override
                 )
                 showAddJournalDialog = false
                 journalLogToEdit = null
@@ -779,8 +1014,10 @@ fun WeeklyBreakdownCard(
 ) {
     val log = row.log
     val monDateStr = LocalDate.parse(log.startDate)
-    val formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
-    val displayRange = "${monDateStr.format(formatter)} - ${monDateStr.plusDays(6).format(formatter)}"
+    val fShort = DateTimeFormatter.ofPattern("dd.MM")
+    val displayRange = "${monDateStr.format(fShort)} - ${monDateStr.plusDays(6).format(fShort)} | ${monDateStr.year} г."
+    val weekOfMonth = ((monDateStr.dayOfMonth - 1) / 7) + 1
+    val weekNumStr = "$weekOfMonth неделя"
 
     Card(
         modifier = Modifier.fillMaxWidth().testTag("weekly_breakdown_${log.id}"),
@@ -804,7 +1041,7 @@ fun WeeklyBreakdownCard(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = displayRange,
+                        text = "$displayRange • $weekNumStr",
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onSurface
@@ -830,8 +1067,9 @@ fun WeeklyBreakdownCard(
                 val daysShort = listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
                 val loads = log.getLoads()
                 val holidays = log.getHolidays()
+                val baseDate = try { LocalDate.parse(log.startDate) } catch(e: Exception) { null }
                 
-                daysShort.zip(loads).zip(holidays).forEach { (dayAndLoad, isHoliday) ->
+                daysShort.zip(loads).zip(holidays).forEachIndexed { index, (dayAndLoad, isHoliday) ->
                     val (day, load) = dayAndLoad
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
@@ -840,6 +1078,16 @@ fun WeeklyBreakdownCard(
                             fontWeight = FontWeight.Bold,
                             color = if (isHoliday) Rose500 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                         )
+                        if (baseDate != null) {
+                            Text(
+                                text = baseDate.plusDays(index.toLong()).dayOfMonth.toString(),
+                                fontSize = 10.sp,
+                                color = if (isHoliday) Rose500.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                fontWeight = FontWeight.Medium
+                            )
+                        } else {
+                            Spacer(modifier = Modifier.height(13.dp))
+                        }
                         Spacer(modifier = Modifier.height(4.dp))
                         Box(
                             modifier = Modifier
@@ -869,6 +1117,56 @@ fun WeeklyBreakdownCard(
                 }
             }
 
+            val baseDate = try { LocalDate.parse(log.startDate) } catch(e: Exception) { null }
+            val restDaysList = log.getLoads().mapIndexedNotNull { index, load ->
+                if (load == "В" && baseDate != null) {
+                    baseDate.plusDays(index.toLong()).dayOfMonth.toString()
+                } else null
+            }
+            val restDaysDisplay = if (restDaysList.isEmpty()) "—" else restDaysList.joinToString(", ")
+            val restHoursDisplay = log.calculateRestHours().toInt()
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Display of rest days/dates & summary hours
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "🌴 Выходные (д): ",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = restDaysDisplay,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Amber500
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Выходные (ч): ",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "$restHoursDisplay ч.",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(14.dp))
 
             // Calculated Stats Grid
@@ -883,7 +1181,7 @@ fun WeeklyBreakdownCard(
                     color = if (row.col6 > 0) Emerald100 else MaterialTheme.colorScheme.surfaceVariant
                 ) {
                     Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Переработка", fontSize = 10.sp, color = if (row.col6 > 0) Emerald600 else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Переработал", fontSize = 10.sp, color = if (row.col6 > 0) Emerald600 else MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("+${row.col6} ч.", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = if (row.col6 > 0) Emerald600 else MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("сверх 40ч нор.", fontSize = 9.sp, color = if (row.col6 > 0) Emerald600 else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -907,7 +1205,7 @@ fun WeeklyBreakdownCard(
                     color = Emerald500
                 ) {
                     Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Остаток (К13)", fontSize = 10.sp, color = Color.White)
+                        Text("Переработка", fontSize = 10.sp, color = Color.White)
                         Text("${row.col13} ч.", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         Text("текущий баланс", fontSize = 9.sp, color = Color.White)
                     }
@@ -975,7 +1273,7 @@ fun JournalTable(
             val headers = listOf(
                 Pair("1. №", 45.dp),
                 Pair("2. Должность", 130.dp),
-                Pair("3. Номер", 80.dp),
+                Pair("3. Звание", 80.dp),
                 Pair("4. ФИО", 150.dp),
                 Pair("5. Дата диапазон", 110.dp),
                 Pair("6. Будни сверх н. (ч)", 125.dp),
@@ -1077,7 +1375,7 @@ fun WeeklyScheduleDialog(
     startDateString: String,
     existingLog: WeeklyLog?,
     onDismiss: () -> Unit,
-    onSave: (String, List<String>, List<Boolean>, String, Double) -> Unit
+    onSave: (String, List<String>, List<Boolean>, String, Double, Double?) -> Unit
 ) {
     var selectedMondayDate by remember { mutableStateOf(LocalDate.parse(startDateString)) }
     val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
@@ -1110,6 +1408,7 @@ fun WeeklyScheduleDialog(
 
     var addRestDate by remember { mutableStateOf(existingLog?.additionalRestDaysDate ?: "") }
     var addRestHoursStr by remember { mutableStateOf(existingLog?.additionalRestDaysHours?.toString() ?: "0.0") }
+    var col13OverrideStr by remember { mutableStateOf(existingLog?.col13Override?.toString() ?: "") }
 
     val daysLabelRus = listOf("Понедельник Пн", "Вторник Вт", "Среда Ср", "Четверг Чт", "Пятница Пт", "Суббота Сб", "Воскресенье Вс")
 
@@ -1146,10 +1445,11 @@ fun WeeklyScheduleDialog(
                     ) { Icon(Icons.Default.ChevronLeft, contentDescription = "Назад") }
 
                     val displayMon = selectedMondayDate.format(DateTimeFormatter.ofPattern("dd.MM"))
-                    val displaySun = selectedMondayDate.plusDays(6).format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+                    val displaySun = selectedMondayDate.plusDays(6).format(DateTimeFormatter.ofPattern("dd.MM"))
+                    val displayYear = selectedMondayDate.year
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Неделя периода:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                        Text("$displayMon - $displaySun", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("$displayMon - $displaySun | $displayYear г.", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
 
                     IconButton(
@@ -1286,6 +1586,27 @@ fun WeeklyScheduleDialog(
                             }
                         }
                     }
+
+                    // Column 13 Balance Override
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Переопределение итогового баланса переработки", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                OutlinedTextField(
+                                    value = col13OverrideStr,
+                                    onValueChange = { col13OverrideStr = it },
+                                    label = { Text("Переработка (Кол 13 принудительно)") },
+                                    placeholder = { Text("Оставьте пустым для авторасчёта") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth().testTag("col13_override_input")
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -1301,12 +1622,14 @@ fun WeeklyScheduleDialog(
                     Button(
                         onClick = {
                             val addHours = addRestHoursStr.toDoubleOrNull() ?: 0.0
+                            val col13Override = col13OverrideStr.toDoubleOrNull()
                             onSave(
                                 selectedMondayDate.format(formatter),
                                 loads.toList(),
                                 holidays.toList(),
                                 addRestDate,
-                                addHours
+                                addHours,
+                                col13Override
                             )
                         },
                         modifier = Modifier.testTag("save_weekly_log_button")
@@ -1474,5 +1797,32 @@ fun RatingItem(symbol: String, desc: String) {
         }
         Spacer(modifier = Modifier.width(12.dp))
         Text(desc, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
+    }
+}
+
+@Composable
+fun FancyFilterChip(
+    selected: Boolean,
+    onClick: () -> Unit,
+    label: String
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(8.dp),
+        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        border = if (selected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        modifier = Modifier.padding(2.dp)
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = label,
+                fontSize = 12.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }

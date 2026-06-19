@@ -44,7 +44,8 @@ data class WeeklyLog(
     
     // Дополнительные сутки отдыха (колонки 11 и 12)
     val additionalRestDaysDate: String = "", // Дата(ы) дополнительных суток отдыха
-    val additionalRestDaysHours: Double = 0.0 // Часы дополнительных суток отдыха
+    val additionalRestDaysHours: Double = 0.0, // Часы дополнительных суток отдыха
+    val col13Override: Double? = null // Ручной ввод переработки (К13)
 ) {
     
     // Helper to get list of loads
