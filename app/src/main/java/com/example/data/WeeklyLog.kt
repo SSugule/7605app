@@ -62,30 +62,35 @@ data class WeeklyLog(
     // «Ф» — Наряд Ф: Будние — 28 ч, Выходные/праздники — 27 ч
     // «В» — Выходной: 0 ч работы (но 8 ч отдыха в колонку 10)
     // «—» — Ранее отработанный день после суточного наряда (0 ч работы, 0 ч отдыха)
-    fun calculateDailyWorkHours(): List<Double> {
+    fun calculateDailyWorkHours(rulesMap: Map<String, DutyRule> = emptyMap()): List<Double> {
         val loads = getLoads()
         val holidays = getHolidays()
         
         return loads.zip(holidays).map { (load, isHoliday) ->
             val cleanLoad = load.trim().uppercase()
-            when (cleanLoad) {
-                "Р" -> if (isHoliday) 4.0 else 7.0
-                "ВГ", "П1" -> if (isHoliday) 29.0 else 30.0
-                "Ф" -> if (isHoliday) 27.0 else 28.0
-                "В", "B", "—" -> 0.0
-                else -> 0.0
+            val rule = rulesMap[cleanLoad]
+            if (rule != null) {
+                if (isHoliday) rule.holidayHours else rule.weekdayHours
+            } else {
+                when (cleanLoad) {
+                    "Р" -> if (isHoliday) 4.0 else 7.0
+                    "ВГ", "П1" -> if (isHoliday) 29.0 else 30.0
+                    "Ф" -> if (isHoliday) 27.0 else 28.0
+                    "В", "B", "—" -> 0.0
+                    else -> 0.0
+                }
             }
         }
     }
 
     // Расчет суммарного времени нагрузки за неделю (Колонка 8)
-    fun calculateTotalWorkHours(): Double {
-        return calculateDailyWorkHours().sum()
+    fun calculateTotalWorkHours(rulesMap: Map<String, DutyRule> = emptyMap()): Double {
+        return calculateDailyWorkHours(rulesMap).sum()
     }
 
     // Расчет времени в выходные и праздничные дни (Колонка 7)
-    fun calculateWeekendWorkHours(): Double {
-        val dailyHours = calculateDailyWorkHours()
+    fun calculateWeekendWorkHours(rulesMap: Map<String, DutyRule> = emptyMap()): Double {
+        val dailyHours = calculateDailyWorkHours(rulesMap)
         val holidays = getHolidays()
         
         return dailyHours.zip(holidays)
@@ -95,8 +100,8 @@ data class WeeklyLog(
 
     // Расчет переработки сверх установленной нормы в 40 часов (Колонка 6)
     // "40 часов в неделю норма работы, всё, что выше идёт в переработку"
-    fun calculateWeeklyOvertimeHours(): Double {
-        val totalWork = calculateTotalWorkHours()
+    fun calculateWeeklyOvertimeHours(rulesMap: Map<String, DutyRule> = emptyMap()): Double {
+        val totalWork = calculateTotalWorkHours(rulesMap)
         return if (totalWork > 40.0) totalWork - 40.0 else 0.0
     }
 
@@ -121,7 +126,7 @@ data class WeeklyLog(
 
     // Расчет предоставленного времени отдыха в часах (Колонка 10)
     // "В" = 8 часов отдыха
-    fun calculateRestHours(): Double {
+    fun calculateRestHours(rulesMap: Map<String, DutyRule> = emptyMap()): Double {
         val countV = getLoads().count {
             val cleanLoad = it.trim().uppercase()
             cleanLoad == "В" || cleanLoad == "B"

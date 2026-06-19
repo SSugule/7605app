@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [Employee::class, WeeklyLog::class], version = 1, exportSchema = false)
+@Database(entities = [Employee::class, WeeklyLog::class, DutyRule::class], version = 2, exportSchema = false)
 abstract class OverworkDatabase : RoomDatabase() {
     abstract fun overworkDao(): OverworkDao
 

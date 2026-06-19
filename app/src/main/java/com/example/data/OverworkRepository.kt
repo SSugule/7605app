@@ -45,4 +45,19 @@ class OverworkRepository(private val overworkDao: OverworkDao) {
     suspend fun deleteWeeklyLog(log: WeeklyLog) {
         overworkDao.deleteWeeklyLog(log)
     }
+
+    // Duty Rules
+    val allDutyRules: Flow<List<DutyRule>> = overworkDao.getAllDutyRules()
+
+    suspend fun insertDutyRule(rule: DutyRule) {
+        overworkDao.insertDutyRule(rule)
+    }
+
+    suspend fun updateDutyRule(rule: DutyRule) {
+        overworkDao.updateDutyRule(rule)
+    }
+
+    suspend fun deleteDutyRule(rule: DutyRule) {
+        overworkDao.deleteDutyRule(rule)
+    }
 }

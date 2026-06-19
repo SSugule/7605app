@@ -24,6 +24,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalContext
+import android.content.Context
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -36,6 +38,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.Employee
 import com.example.data.WeeklyLog
+import com.example.data.DutyRule
 import com.example.ui.theme.*
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -588,10 +591,45 @@ fun EmployeeDialog(
     onDismiss: () -> Unit,
     onSave: (String, String, String, Double) -> Unit
 ) {
-    var name by remember { mutableStateOf(employee?.name ?: "") }
-    var position by remember { mutableStateOf(employee?.position ?: "") }
-    var num by remember { mutableStateOf(employee?.employeeNumber ?: "Рядовой") }
-    var initialBalanceStr by remember { mutableStateOf(employee?.initialBalance?.toString() ?: "0.0") }
+    val context = LocalContext.current
+    val sharedPrefs = remember { context.getSharedPreferences("overwork_drafts_prefs", Context.MODE_PRIVATE) }
+    val draftKeyPrefix = if (employee == null) "create_employee_" else "edit_employee_${employee.id}_"
+
+    var name by remember {
+        mutableStateOf(sharedPrefs.getString(draftKeyPrefix + "name", null) ?: employee?.name ?: "")
+    }
+    var position by remember {
+        mutableStateOf(sharedPrefs.getString(draftKeyPrefix + "position", null) ?: employee?.position ?: "")
+    }
+    var num by remember {
+        mutableStateOf(sharedPrefs.getString(draftKeyPrefix + "num", null) ?: employee?.employeeNumber ?: "Рядовой")
+    }
+    var initialBalanceStr by remember {
+        mutableStateOf(sharedPrefs.getString(draftKeyPrefix + "balance", null) ?: employee?.initialBalance?.toString() ?: "0.0")
+    }
+
+    LaunchedEffect(name) {
+        sharedPrefs.edit().putString(draftKeyPrefix + "name", name).apply()
+    }
+    LaunchedEffect(position) {
+        sharedPrefs.edit().putString(draftKeyPrefix + "position", position).apply()
+    }
+    LaunchedEffect(num) {
+        sharedPrefs.edit().putString(draftKeyPrefix + "num", num).apply()
+    }
+    LaunchedEffect(initialBalanceStr) {
+        sharedPrefs.edit().putString(draftKeyPrefix + "balance", initialBalanceStr).apply()
+    }
+
+    fun clearDrafts() {
+        sharedPrefs.edit()
+            .remove(draftKeyPrefix + "name")
+            .remove(draftKeyPrefix + "position")
+            .remove(draftKeyPrefix + "num")
+            .remove(draftKeyPrefix + "balance")
+            .apply()
+    }
+
     var expandedRank by remember { mutableStateOf(false) }
     val ranksList = listOf("Старший прапорщик", "Прапорщик", "Старший сержант", "Сержант", "Младший сержант", "Ефрейтор", "Рядовой")
 
@@ -642,7 +680,7 @@ fun EmployeeDialog(
                         modifier = Modifier.fillMaxWidth().testTag("employee_num_input")
                     )
                     Box(
-                        modifier = Modifier
+                         modifier = Modifier
                             .matchParentSize()
                             .clickable { expandedRank = true }
                     )
@@ -678,6 +716,7 @@ fun EmployeeDialog(
                 onClick = {
                     val balanceVal = initialBalanceStr.toDoubleOrNull() ?: 0.0
                     if (name.isNotBlank() && position.isNotBlank() && num.isNotBlank()) {
+                        clearDrafts()
                         onSave(name, position, num, balanceVal)
                     }
                 },
@@ -685,7 +724,12 @@ fun EmployeeDialog(
             ) { Text("Сохранить") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Отмена") }
+            TextButton(
+                onClick = {
+                    clearDrafts()
+                    onDismiss()
+                }
+            ) { Text("Отмена") }
         }
     )
 }
@@ -1538,35 +1582,97 @@ fun WeeklyScheduleDialog(
     var selectedMondayDate by remember { mutableStateOf(LocalDate.parse(startDateString)) }
     val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
+    val context = LocalContext.current
+    val sharedPrefs = remember { context.getSharedPreferences("overwork_drafts_prefs", Context.MODE_PRIVATE) }
+    val draftKeyPrefix = "weekly_log_${employeeId}_${selectedMondayDate.format(formatter)}_"
+
     // Loads state for Monday-Sunday: "Р", "ВГ", "П1", "Ф", "В", "—"
-    val loads = remember {
-        mutableStateListOf(
-            existingLog?.monLoad ?: "—",
-            existingLog?.tueLoad ?: "—",
-            existingLog?.wedLoad ?: "—",
-            existingLog?.thuLoad ?: "—",
-            existingLog?.friLoad ?: "—",
-            existingLog?.satLoad ?: "—",
-            existingLog?.sunLoad ?: "—"
-        )
+    val loads = remember(selectedMondayDate) {
+        val draftStr = sharedPrefs.getString("weekly_log_${employeeId}_${selectedMondayDate.format(formatter)}_loads", null)
+        val draftList = draftStr?.split(",")?.filter { it.isNotEmpty() }
+        val initialList = if (draftList != null && draftList.size == 7) {
+            draftList
+        } else {
+            listOf(
+                existingLog?.monLoad ?: "—",
+                existingLog?.tueLoad ?: "—",
+                existingLog?.wedLoad ?: "—",
+                existingLog?.thuLoad ?: "—",
+                existingLog?.friLoad ?: "—",
+                existingLog?.satLoad ?: "—",
+                existingLog?.sunLoad ?: "—"
+            )
+        }
+        mutableStateListOf<String>().apply { addAll(initialList) }
     }
 
     // Holiday statuses for Monday-Sunday
-    val holidays = remember {
-        mutableStateListOf(
-            existingLog?.monHoliday ?: false,
-            existingLog?.tueHoliday ?: false,
-            existingLog?.wedHoliday ?: false,
-            existingLog?.thuHoliday ?: false,
-            existingLog?.friHoliday ?: false,
-            existingLog?.satHoliday ?: true,
-            existingLog?.sunHoliday ?: true
+    val holidays = remember(selectedMondayDate) {
+        val draftStr = sharedPrefs.getString("weekly_log_${employeeId}_${selectedMondayDate.format(formatter)}_holidays", null)
+        val draftList = draftStr?.split(",")?.filter { it.isNotEmpty() }?.map { it == "1" }
+        val initialList = if (draftList != null && draftList.size == 7) {
+            draftList
+        } else {
+            listOf(
+                existingLog?.monHoliday ?: false,
+                existingLog?.tueHoliday ?: false,
+                existingLog?.wedHoliday ?: false,
+                existingLog?.thuHoliday ?: false,
+                existingLog?.friHoliday ?: false,
+                existingLog?.satHoliday ?: true,
+                existingLog?.sunHoliday ?: true
+            )
+        }
+        mutableStateListOf<Boolean>().apply { addAll(initialList) }
+    }
+
+    var addRestDate by remember(selectedMondayDate) {
+        mutableStateOf(
+            sharedPrefs.getString("weekly_log_${employeeId}_${selectedMondayDate.format(formatter)}_add_rest_date", null)
+                ?: existingLog?.additionalRestDaysDate
+                ?: ""
+        )
+    }
+    var addRestHoursStr by remember(selectedMondayDate) {
+        mutableStateOf(
+            sharedPrefs.getString("weekly_log_${employeeId}_${selectedMondayDate.format(formatter)}_add_rest_hours", null)
+                ?: existingLog?.additionalRestDaysHours?.toString()
+                ?: "0.0"
+        )
+    }
+    var col13OverrideStr by remember(selectedMondayDate) {
+        mutableStateOf(
+            sharedPrefs.getString("weekly_log_${employeeId}_${selectedMondayDate.format(formatter)}_col13_override", null)
+                ?: existingLog?.col13Override?.toString()
+                ?: ""
         )
     }
 
-    var addRestDate by remember { mutableStateOf(existingLog?.additionalRestDaysDate ?: "") }
-    var addRestHoursStr by remember { mutableStateOf(existingLog?.additionalRestDaysHours?.toString() ?: "0.0") }
-    var col13OverrideStr by remember { mutableStateOf(existingLog?.col13Override?.toString() ?: "") }
+    LaunchedEffect(selectedMondayDate, loads.toList()) {
+        sharedPrefs.edit().putString(draftKeyPrefix + "loads", loads.toList().joinToString(",")).apply()
+    }
+    LaunchedEffect(selectedMondayDate, holidays.toList()) {
+        sharedPrefs.edit().putString(draftKeyPrefix + "holidays", holidays.toList().map { if (it) "1" else "0" }.joinToString(",")).apply()
+    }
+    LaunchedEffect(selectedMondayDate, addRestDate) {
+        sharedPrefs.edit().putString(draftKeyPrefix + "add_rest_date", addRestDate).apply()
+    }
+    LaunchedEffect(selectedMondayDate, addRestHoursStr) {
+        sharedPrefs.edit().putString(draftKeyPrefix + "add_rest_hours", addRestHoursStr).apply()
+    }
+    LaunchedEffect(selectedMondayDate, col13OverrideStr) {
+        sharedPrefs.edit().putString(draftKeyPrefix + "col13_override", col13OverrideStr).apply()
+    }
+
+    fun clearDrafts() {
+        sharedPrefs.edit()
+            .remove(draftKeyPrefix + "loads")
+            .remove(draftKeyPrefix + "holidays")
+            .remove(draftKeyPrefix + "add_rest_date")
+            .remove(draftKeyPrefix + "add_rest_hours")
+            .remove(draftKeyPrefix + "col13_override")
+            .apply()
+    }
 
     val daysLabelRus = listOf("Понедельник Пн", "Вторник Вт", "Среда Ср", "Четверг Чт", "Пятница Пт", "Суббота Сб", "Воскресенье Вс")
 
@@ -1683,15 +1789,16 @@ fun WeeklyScheduleDialog(
 
                                 // Designation rounded chips selector
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    val options = listOf("Р", "ВГ", "П1", "Ф", "В", "—")
+                                    val dutyRulesState by viewModel.dutyRules.collectAsStateWithLifecycle()
+                                    val options = dutyRulesState.map { it.symbol }
                                     options.forEach { option ->
                                         val isSelected = loads[index] == option
                                         Surface(
                                             modifier = Modifier
-                                                .weight(1f)
+                                                .widthIn(min = 46.dp)
                                                 .clickable { loads[index] = option }
                                                 .testTag("day_${index}_chip_$option"),
                                             shape = RoundedCornerShape(6.dp),
@@ -1699,7 +1806,7 @@ fun WeeklyScheduleDialog(
                                             border = if (isSelected) null else BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
                                         ) {
                                             Box(
-                                                modifier = Modifier.padding(vertical = 8.dp),
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 Text(
@@ -1775,12 +1882,18 @@ fun WeeklyScheduleDialog(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = onDismiss) { Text("Отмена") }
+                    TextButton(
+                        onClick = {
+                            clearDrafts()
+                            onDismiss()
+                        }
+                    ) { Text("Отмена") }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = {
                             val addHours = addRestHoursStr.toDoubleOrNull() ?: 0.0
                             val col13Override = col13OverrideStr.toDoubleOrNull()
+                            clearDrafts()
                             onSave(
                                 selectedMondayDate.format(formatter),
                                 loads.toList(),
@@ -1805,6 +1918,10 @@ fun InfoScreen(isWideScreen: Boolean, viewModel: OverworkViewModel) {
     val githubOwner by viewModel.githubOwner.collectAsStateWithLifecycle()
     val githubRepo by viewModel.githubRepo.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
+    val dutyRules by viewModel.dutyRules.collectAsStateWithLifecycle()
+
+    var showAddRuleDialog by remember { mutableStateOf(false) }
+    var ruleToEdit by remember { mutableStateOf<DutyRule?>(null) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -1958,7 +2075,7 @@ fun InfoScreen(isWideScreen: Boolean, viewModel: OverworkViewModel) {
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text("Запустить установку APK")
-                            }
+                             }
                         }
                         is UpdateState.Error -> {
                             Text("❌ Не удалось обновиться: ${state.message}", fontSize = 12.sp, color = Rose500)
@@ -1991,20 +2108,39 @@ fun InfoScreen(isWideScreen: Boolean, viewModel: OverworkViewModel) {
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("📋 Обозначения рабочей нагрузки", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "📋 Обозначения рабочей нагрузки",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Button(
+                                    onClick = { showAddRuleDialog = true },
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(34.dp).testTag("add_rule_btn_wide")
+                                ) {
+                                    Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Добавить наряд", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
                             Spacer(modifier = Modifier.height(10.dp))
                             
-                            RatingItem(symbol = "Р", desc = "Рабочий день сверх продолжительности. В будни равен 7 часам работы. В праздничные и выходные равен 4 часам.")
-                            Divider(modifier = Modifier.padding(vertical = 8.dp))
-                            RatingItem(symbol = "ВГ", desc = "Наряд ВГ. Стандартный суточный караул. В будни списывается как 30 часов, в выходные/праздники — 29 часов.")
-                            Divider(modifier = Modifier.padding(vertical = 8.dp))
-                            RatingItem(symbol = "П1", desc = "Наряд П1. Списывается аналогично ВГ: в будни равен 30 часам, в выходные/праздники — 29 часам.")
-                            Divider(modifier = Modifier.padding(vertical = 8.dp))
-                            RatingItem(symbol = "Ф", desc = "Наряд Ф. Отработанное суточное время: в будни начисляется 28 часов, в выходные/праздники — 27 часов.")
-                            Divider(modifier = Modifier.padding(vertical = 8.dp))
-                            RatingItem(symbol = "В", desc = "Выходной сотрудника. Считается как 8 часов отдыха, зачисляется в Колонку 10, а дата пишется в Колонку 9.")
-                            Divider(modifier = Modifier.padding(vertical = 8.dp))
-                            RatingItem(symbol = "—", desc = "Прочерк (Смена закрыта). Обозначает посленарядный отдых (например, после суточного дежурства со среды на четверг). 0 часов работы.")
+                            dutyRules.forEachIndexed { index, rule ->
+                                RatingItemWithActions(
+                                    rule = rule,
+                                    onEdit = { ruleToEdit = rule },
+                                    onDelete = { viewModel.deleteDutyRule(rule) }
+                                )
+                                if (index < dutyRules.lastIndex) {
+                                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                                }
+                            }
                         }
                     }
 
@@ -2046,20 +2182,39 @@ fun InfoScreen(isWideScreen: Boolean, viewModel: OverworkViewModel) {
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("📋 Обозначения рабочей нагрузки", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "📋 Обозначения рабочей нагрузки",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Button(
+                                onClick = { showAddRuleDialog = true },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                modifier = Modifier.height(34.dp).testTag("add_rule_btn_mobile")
+                            ) {
+                                Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Создать", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
                         Spacer(modifier = Modifier.height(10.dp))
                         
-                        RatingItem(symbol = "Р", desc = "Рабочий день сверх продолжительности. В будни равен 7 часам работы. В праздничные и выходные равен 4 часам.")
-                        Divider(modifier = Modifier.padding(vertical = 8.dp))
-                        RatingItem(symbol = "ВГ", desc = "Наряд ВГ. Стандартный суточный караул. В будни списывается как 30 часов, в выходные/праздники — 29 часов.")
-                        Divider(modifier = Modifier.padding(vertical = 8.dp))
-                        RatingItem(symbol = "П1", desc = "Наряд П1. Списывается аналогично ВГ: в будни равен 30 часам, в выходные/праздники — 29 часам.")
-                        Divider(modifier = Modifier.padding(vertical = 8.dp))
-                        RatingItem(symbol = "Ф", desc = "Наряд Ф. Отработанное суточное время: в будни начисляется 28 часов, в выходные/праздники — 27 часов.")
-                        Divider(modifier = Modifier.padding(vertical = 8.dp))
-                        RatingItem(symbol = "В", desc = "Выходной сотрудника. Считается как 8 часов отдыха, зачисляется в Колонку 10, а дата пишется в Колонку 9.")
-                        Divider(modifier = Modifier.padding(vertical = 8.dp))
-                        RatingItem(symbol = "—", desc = "Прочерк (Смена закрыта). Обозначает посленарядный отдых (например, после суточного дежурства со среды на четверг). 0 часов работы.")
+                        dutyRules.forEachIndexed { index, rule ->
+                            RatingItemWithActions(
+                                rule = rule,
+                                onEdit = { ruleToEdit = rule },
+                                onDelete = { viewModel.deleteDutyRule(rule) }
+                            )
+                            if (index < dutyRules.lastIndex) {
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                            }
+                        }
                     }
                 }
             }
@@ -2097,6 +2252,261 @@ fun InfoScreen(isWideScreen: Boolean, viewModel: OverworkViewModel) {
             }
         }
     }
+
+    if (showAddRuleDialog) {
+        RuleDialog(
+            initialRule = null,
+            onDismiss = { showAddRuleDialog = false },
+            onSave = {
+                viewModel.insertDutyRule(it)
+                showAddRuleDialog = false
+            }
+        )
+    }
+
+    ruleToEdit?.let { rule ->
+        RuleDialog(
+            initialRule = rule,
+            onDismiss = { ruleToEdit = null },
+            onSave = {
+                viewModel.updateDutyRule(it)
+                ruleToEdit = null
+            }
+        )
+    }
+}
+
+@Composable
+fun RatingItemWithActions(
+    rule: DutyRule,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().testTag("rule_row_${rule.symbol}"),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.Top
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(42.dp)
+                    .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(6.dp))
+                    .padding(vertical = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = rule.symbol,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = rule.name,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Будни: ${rule.weekdayHours.toString().removeSuffix(".0")} ч | Праздники: ${rule.holidayHours.toString().removeSuffix(".0")} ч",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                if (rule.description.isNotEmpty()) {
+                    Text(
+                        text = rule.description,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                    )
+                }
+            }
+        }
+        
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onEdit,
+                modifier = Modifier.size(36.dp).testTag("edit_rule_${rule.symbol}")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "Редактировать",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            if (!rule.isSystem) {
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(36.dp).testTag("delete_rule_${rule.symbol}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Удалить",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.width(36.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun RuleDialog(
+    initialRule: DutyRule?,
+    onDismiss: () -> Unit,
+    onSave: (DutyRule) -> Unit
+) {
+    val context = LocalContext.current
+    val sharedPrefs = remember { context.getSharedPreferences("overwork_drafts_prefs", Context.MODE_PRIVATE) }
+    val draftKeyPrefix = if (initialRule == null) "create_rule_" else "edit_rule_${initialRule.symbol}_"
+
+    var symbol by remember {
+        mutableStateOf(sharedPrefs.getString(draftKeyPrefix + "symbol", null) ?: initialRule?.symbol ?: "")
+    }
+    var name by remember {
+        mutableStateOf(sharedPrefs.getString(draftKeyPrefix + "name", null) ?: initialRule?.name ?: "")
+    }
+    var description by remember {
+        mutableStateOf(sharedPrefs.getString(draftKeyPrefix + "description", null) ?: initialRule?.description ?: "")
+    }
+    var weekdayHours by remember {
+        mutableStateOf(sharedPrefs.getString(draftKeyPrefix + "weekday_hours", null) ?: initialRule?.weekdayHours?.toString()?.removeSuffix(".0") ?: "8")
+    }
+    var holidayHours by remember {
+        mutableStateOf(sharedPrefs.getString(draftKeyPrefix + "holiday_hours", null) ?: initialRule?.holidayHours?.toString()?.removeSuffix(".0") ?: "8")
+    }
+
+    LaunchedEffect(symbol) {
+        sharedPrefs.edit().putString(draftKeyPrefix + "symbol", symbol).apply()
+    }
+    LaunchedEffect(name) {
+        sharedPrefs.edit().putString(draftKeyPrefix + "name", name).apply()
+    }
+    LaunchedEffect(description) {
+        sharedPrefs.edit().putString(draftKeyPrefix + "description", description).apply()
+    }
+    LaunchedEffect(weekdayHours) {
+        sharedPrefs.edit().putString(draftKeyPrefix + "weekday_hours", weekdayHours).apply()
+    }
+    LaunchedEffect(holidayHours) {
+        sharedPrefs.edit().putString(draftKeyPrefix + "holiday_hours", holidayHours).apply()
+    }
+
+    fun clearDrafts() {
+        sharedPrefs.edit()
+            .remove(draftKeyPrefix + "symbol")
+            .remove(draftKeyPrefix + "name")
+            .remove(draftKeyPrefix + "description")
+            .remove(draftKeyPrefix + "weekday_hours")
+            .remove(draftKeyPrefix + "holiday_hours")
+            .apply()
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(if (initialRule == null) "Создать наряд" else "Редактировать наряд")
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = symbol,
+                    onValueChange = { symbol = it.uppercase().take(5).trim() },
+                    label = { Text("Обозначение (Символ*)") },
+                    placeholder = { Text("например: П2") },
+                    enabled = initialRule == null,
+                    modifier = Modifier.fillMaxWidth().testTag("rule_dialog_symbol_input"),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Название наряда*") },
+                    placeholder = { Text("например: Наряд П2") },
+                    modifier = Modifier.fillMaxWidth().testTag("rule_dialog_name_input"),
+                    singleLine = true
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = weekdayHours,
+                        onValueChange = { weekdayHours = it },
+                        label = { Text("Часы в будни") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f).testTag("rule_dialog_weekday_hours_input"),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = holidayHours,
+                        onValueChange = { holidayHours = it },
+                        label = { Text("В праздники") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f).testTag("rule_dialog_holiday_hours_input"),
+                        singleLine = true
+                    )
+                }
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Описание") },
+                    placeholder = { Text("Краткое пояснение расчета нагрузки") },
+                    modifier = Modifier.fillMaxWidth().testTag("rule_dialog_desc_input"),
+                    maxLines = 3
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val wdHours = weekdayHours.toDoubleOrNull() ?: 0.0
+                    val hdHours = holidayHours.toDoubleOrNull() ?: 0.0
+                    if (symbol.isNotBlank() && name.isNotBlank()) {
+                        clearDrafts()
+                        onSave(
+                            DutyRule(
+                                symbol = symbol,
+                                name = name,
+                                description = description,
+                                weekdayHours = wdHours,
+                                holidayHours = hdHours,
+                                isSystem = initialRule?.isSystem ?: false
+                            )
+                        )
+                    }
+                },
+                enabled = symbol.isNotBlank() && name.isNotBlank(),
+                modifier = Modifier.testTag("rule_dialog_save_btn")
+            ) {
+                Text("Сохранить")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = {
+                    clearDrafts()
+                    onDismiss()
+                },
+                modifier = Modifier.testTag("rule_dialog_cancel_btn")
+            ) {
+                Text("Отмена")
+            }
+        }
+    )
 }
 
 @Composable

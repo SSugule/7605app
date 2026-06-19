@@ -40,4 +40,17 @@ interface OverworkDao {
 
     @Delete
     suspend fun deleteWeeklyLog(log: WeeklyLog)
+
+    // --- DutyRule Operations ---
+    @Query("SELECT * FROM duty_rules ORDER BY isSystem ASC, symbol ASC")
+    fun getAllDutyRules(): Flow<List<DutyRule>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDutyRule(rule: DutyRule)
+
+    @Update
+    suspend fun updateDutyRule(rule: DutyRule)
+
+    @Delete
+    suspend fun deleteDutyRule(rule: DutyRule)
 }

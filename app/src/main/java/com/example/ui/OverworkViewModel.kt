@@ -41,17 +41,27 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
     // List of all employees
     val employees: StateFlow<List<Employee>> = repositoryAllEmployeesFlow()
 
+    // List of all duty rules
+    val dutyRules: StateFlow<List<DutyRule>> = repository.allDutyRules
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Map of upper-cased symbol to its DutyRule
+    val rulesMap: StateFlow<Map<String, DutyRule>> = dutyRules
+        .map { list -> list.associateBy { it.symbol.trim().uppercase() } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     // Flows of employee state mapped with their current dynamically calculated Column 13 overwork balance.
     val employeesWithBalance: StateFlow<List<Pair<Employee, Double>>> = combine(
         repository.allEmployees,
-        repository.allWeeklyLogs
-    ) { employeeList, logsList ->
+        repository.allWeeklyLogs,
+        rulesMap
+    ) { employeeList, logsList, rules ->
         employeeList.map { employee ->
             val empLogs = logsList.filter { it.employeeId == employee.id }.sortedBy { it.startDate }
             val balance = if (empLogs.isEmpty()) {
                 employee.initialBalance
             } else {
-                val calculatedRows = computeChronologicalLogs(employee, empLogs)
+                val calculatedRows = computeChronologicalLogs(employee, empLogs, rules)
                 calculatedRows.lastOrNull()?.col13 ?: employee.initialBalance
             }
             Pair(employee, balance)
@@ -95,6 +105,25 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             updateManager.checkForUpdates(githubOwner.value, githubRepo.value)
         }
+
+        // Prepopulate default duty rules if database is empty
+        viewModelScope.launch {
+            repository.allDutyRules.take(1).collect { existingRules ->
+                if (existingRules.isEmpty()) {
+                    val defaultRules = listOf(
+                        DutyRule("Р", "Рабочий день", "Рабочий день сверх продолжительности. В будни — 7 ч, в праздники — 4 ч.", 7.0, 4.0, false),
+                        DutyRule("ВГ", "Наряд ВГ", "Наряд ВГ. Стандартный суточный караул. В будни — 30 ч, в праздники — 29 ч.", 30.0, 29.0, false),
+                        DutyRule("П1", "Наряд П1", "Наряд П1. Суточный наряд. В будни — 30 ч, в праздники — 29 ч.", 30.0, 29.0, false),
+                        DutyRule("Ф", "Наряд Ф", "Наряд Ф. Суточный наряд. В будни — 28 ч, в праздники — 27 ч.", 28.0, 27.0, false),
+                        DutyRule("В", "Выходной", "Выходной день. 0 ч работы, 8 ч отдыха.", 0.0, 0.0, true),
+                        DutyRule("—", "Послесуточный отдых", "Выходной день после суточного наряда (после суточного дежурства). 0 ч работы.", 0.0, 0.0, true)
+                    )
+                    defaultRules.forEach {
+                        repository.insertDutyRule(it)
+                    }
+                }
+            }
+        }
     }
 
     // Logs of the selected employee
@@ -108,13 +137,14 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
     // Chronologically calculated journal rows for the selected employee
     val journalRows: StateFlow<List<JournalRow>> = combine(
         _selectedEmployee,
-        selectedEmployeeLogs
-    ) { employee, logs ->
+        selectedEmployeeLogs,
+        rulesMap
+    ) { employee, logs, rules ->
         if (employee == null || logs.isEmpty()) emptyList()
         else {
             // Sort logs from oldest to newest for chronological rolling balance
             val sortedLogs = logs.sortedBy { it.startDate }
-            computeChronologicalLogs(employee, sortedLogs).reversed() // reverse to show newest on top in UI
+            computeChronologicalLogs(employee, sortedLogs, rules).reversed() // reverse to show newest on top in UI
         }
     }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -206,10 +236,30 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    // --- DutyRule Actions ---
+    fun insertDutyRule(rule: DutyRule) {
+        viewModelScope.launch {
+            repository.insertDutyRule(rule)
+        }
+    }
+
+    fun updateDutyRule(rule: DutyRule) {
+        viewModelScope.launch {
+            repository.updateDutyRule(rule)
+        }
+    }
+
+    fun deleteDutyRule(rule: DutyRule) {
+        viewModelScope.launch {
+            repository.deleteDutyRule(rule)
+        }
+    }
+
     // Helper to compute rolling chronological balances
     private fun computeChronologicalLogs(
         employee: Employee,
-        logs: List<WeeklyLog> // Sorted ascending by date
+        logs: List<WeeklyLog>, // Sorted ascending by date
+        rules: Map<String, DutyRule> = emptyMap()
     ): List<JournalRow> {
         val rows = mutableListOf<JournalRow>()
         var runningOvertimeBalance = employee.initialBalance
@@ -246,7 +296,7 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
                 }
             }
             
-            val col6 = log.calculateWeeklyOvertimeHours()
+            val col6 = log.calculateWeeklyOvertimeHours(rules)
             val col12 = log.additionalRestDaysHours
             
             if (log.col13Override != null) {
@@ -266,10 +316,10 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
                     index = index + 1,
                     log = log,
                     col6 = col6,
-                    col7 = log.calculateWeekendWorkHours(),
-                    col8 = log.calculateTotalWorkHours(),
+                    col7 = log.calculateWeekendWorkHours(rules),
+                    col8 = log.calculateTotalWorkHours(rules),
                     col9 = log.calculateRestDates().joinToString(", "),
-                    col10 = log.calculateRestHours(),
+                    col10 = log.calculateRestHours(rules),
                     col11 = log.additionalRestDaysDate,
                     col12 = col12,
                     col13 = runningOvertimeBalance,
