@@ -120,13 +120,26 @@ dependencies {
   "ksp"(libs.moshi.kotlin.codegen)
 }
 
-tasks.register<Copy>("copyApkToRoot") {
+tasks.register("copyApkToRoot") {
     group = "build"
-    description = "Copies the compiled debug APK to the project installer directory."
+    description = "Copies the compiled debug APK directly to the project root directory."
     dependsOn("assembleDebug")
     
-    from(layout.buildDirectory.dir("outputs/apk/debug").map { it.file("app-debug.apk") })
-    into(file("${rootDir}/installer"))
-    rename { "app-installer.apk" }
+    val src = layout.buildDirectory.file("outputs/apk/debug/app-debug.apk")
+    val dest = layout.projectDirectory.file("app-installer.apk")
+    
+    inputs.file(src)
+    outputs.file(dest)
+    
+    doLast {
+        val srcFile = src.get().asFile
+        val destFile = dest.asFile
+        if (srcFile.exists()) {
+            srcFile.copyTo(destFile, overwrite = true)
+            println("APK successfully copied to root: ${destFile.absolutePath}")
+        } else {
+            throw GradleException("Source APK not found at ${srcFile.absolutePath}")
+        }
+    }
 }
 
