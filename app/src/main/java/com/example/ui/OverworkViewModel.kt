@@ -23,7 +23,8 @@ data class JournalRow(
     val col11: String, // Дата доп. суток отдыха
     val col12: Double, // Часы доп. суток отдыха
     val col13: Double, // Нереализованное время отдыха (Баланс)
-    val penaltyApplied: Double // Примененное списание за превышение выходных (>6 в месяц)
+    val penaltyApplied: Double, // Примененное списание за превышение выходных (>6 в месяц)
+    val monthlyRestDaysCount: Int // Накопленное количество выходных «В» за текущий месяц
 )
 
 class OverworkViewModel(application: Application) : AndroidViewModel(application) {
@@ -211,15 +212,20 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
             }
             
             var penaltyThisWeek = 0.0
+            var primaryMonthKey = ""
             
             if (monday != null) {
+                primaryMonthKey = monday.format(DateTimeFormatter.ofPattern("yyyy-MM"))
                 log.getLoads().forEachIndexed { loadIdx, load ->
-                    if (load == "В") {
+                    val cleanLoad = load.trim().uppercase()
+                    if (cleanLoad == "В" || cleanLoad == "B") {
                         val dayDate = monday.plusDays(loadIdx.toLong())
                         val monthKey = dayDate.format(DateTimeFormatter.ofPattern("yyyy-MM"))
                         val countSoFar = restCountByMonth[monthKey] ?: 0
                         val newCount = countSoFar + 1
                         restCountByMonth[monthKey] = newCount
+                        
+                        primaryMonthKey = monthKey
                         
                         if (newCount > 6) {
                             // Penalty: deduction of 8 hours from overwork balance
@@ -238,6 +244,12 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
                 runningOvertimeBalance = runningOvertimeBalance + col6 - col12 - penaltyThisWeek
             }
             
+            val restDaysInMonth = if (primaryMonthKey.isNotEmpty()) {
+                restCountByMonth[primaryMonthKey] ?: 0
+            } else {
+                0
+            }
+            
             rows.add(
                 JournalRow(
                     index = index + 1,
@@ -250,7 +262,8 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
                     col11 = log.additionalRestDaysDate,
                     col12 = col12,
                     col13 = runningOvertimeBalance,
-                    penaltyApplied = penaltyThisWeek
+                    penaltyApplied = penaltyThisWeek,
+                    monthlyRestDaysCount = restDaysInMonth
                 )
             )
         }

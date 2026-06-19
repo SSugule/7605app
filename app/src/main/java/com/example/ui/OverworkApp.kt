@@ -1213,7 +1213,7 @@ fun WeeklyBreakdownCard(
             }
 
             // Checks and alarms
-            if (row.penaltyApplied > 0.0 || row.col12 > 0.0) {
+            if (row.penaltyApplied > 0.0 || row.col12 > 0.0 || row.monthlyRestDaysCount > 0) {
                 Spacer(modifier = Modifier.height(10.dp))
                 Row(
                     modifier = Modifier
@@ -1225,9 +1225,17 @@ fun WeeklyBreakdownCard(
                     Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(6.dp))
                     Column {
+                        if (row.monthlyRestDaysCount > 0) {
+                            Text(
+                                text = "📅 Использовано выходных («В») за месяц: ${row.monthlyRestDaysCount} из 6 дн.",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Normal,
+                                color = if (row.monthlyRestDaysCount > 6) Rose500 else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         if (row.penaltyApplied > 0.0) {
                             Text(
-                                text = "⚠️ Превышена норма выходных (>6 в мес): списано -${row.penaltyApplied} ч. отдыха",
+                                text = "⚠️ Превышена норма выходных (>6 в мес): списано -${row.penaltyApplied} ч. переработки",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Rose500
@@ -1323,7 +1331,29 @@ fun JournalTable(
                     TableCell(text = "${row.col10}", width = 125.dp)
                     TableCell(text = row.col11.ifEmpty { "—" }, width = 135.dp)
                     TableCell(text = "${row.col12}", width = 125.dp, color = if (row.col12 > 0) Rose500 else Color.Unspecified)
-                    TableCell(text = "${row.col13} ч.", width = 135.dp, fontWeight = FontWeight.Bold, color = Emerald600)
+                    Column(
+                        modifier = Modifier
+                            .width(135.dp)
+                            .padding(horizontal = 4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "${row.col13} ч.",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Emerald600,
+                            textAlign = TextAlign.Center
+                        )
+                        if (row.penaltyApplied > 0.0) {
+                            Text(
+                                text = "(-${row.penaltyApplied} ч. вых.)",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Rose500,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
                     Box(modifier = Modifier.width(70.dp), contentAlignment = Alignment.Center) {
                         IconButton(onClick = { onEdit(row) }, modifier = Modifier.size(28.dp)) {
                             Icon(Icons.Default.Edit, contentDescription = "Править", modifier = Modifier.size(16.dp))

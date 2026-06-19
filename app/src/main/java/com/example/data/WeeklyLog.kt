@@ -67,11 +67,12 @@ data class WeeklyLog(
         val holidays = getHolidays()
         
         return loads.zip(holidays).map { (load, isHoliday) ->
-            when (load) {
+            val cleanLoad = load.trim().uppercase()
+            when (cleanLoad) {
                 "Р" -> if (isHoliday) 4.0 else 7.0
                 "ВГ", "П1" -> if (isHoliday) 29.0 else 30.0
                 "Ф" -> if (isHoliday) 27.0 else 28.0
-                "В", "—" -> 0.0
+                "В", "B", "—" -> 0.0
                 else -> 0.0
             }
         }
@@ -108,7 +109,8 @@ data class WeeklyLog(
             val formatter = DateTimeFormatter.ofPattern("dd.MM")
             
             loads.mapIndexedNotNull { index, load ->
-                if (load == "В") {
+                val cleanLoad = load.trim().uppercase()
+                if (cleanLoad == "В" || cleanLoad == "B") {
                     monday.plusDays(index.toLong()).format(formatter)
                 } else null
             }
@@ -120,7 +122,10 @@ data class WeeklyLog(
     // Расчет предоставленного времени отдыха в часах (Колонка 10)
     // "В" = 8 часов отдыха
     fun calculateRestHours(): Double {
-        val countV = getLoads().count { it == "В" }
+        val countV = getLoads().count {
+            val cleanLoad = it.trim().uppercase()
+            cleanLoad == "В" || cleanLoad == "B"
+        }
         return countV * 8.0
     }
 }
