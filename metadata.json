@@ -1,0 +1,6 @@
+{
+  "name": "Журнал переработок",
+  "description": "Автоматизированный журнал учета и расчета переработок сотрудников в соответствии с установленными нормами нагрузок.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
