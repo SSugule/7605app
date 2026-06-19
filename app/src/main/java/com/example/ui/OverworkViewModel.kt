@@ -27,7 +27,7 @@ data class JournalRow(
 )
 
 class OverworkViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository: OverworkRepository
+    private val repository: OverworkRepository = OverworkRepository(OverworkDatabase.getDatabase(application).overworkDao())
     private val sharedPrefs = application.getSharedPreferences("overwork_journal_prefs", Context.MODE_PRIVATE)
 
     // List of all employees
@@ -47,9 +47,6 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
     }
 
     init {
-        val database = OverworkDatabase.getDatabase(application)
-        repository = OverworkRepository(database.overworkDao())
-
         // Load saved state (simulating web's localStorage persistence)
         val savedEmployeeId = sharedPrefs.getInt("selected_employee_id", -1)
         val savedScreenRoute = sharedPrefs.getString("current_screen", Screen.Employees.route) ?: Screen.Employees.route
