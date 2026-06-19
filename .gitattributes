@@ -1,0 +1,5 @@
+# Ensure binary files are treated as binary to prevent corruption on different platforms
+*.jar binary
+*.png binary
+*.webp binary
+*.apk binary
