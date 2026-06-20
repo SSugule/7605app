@@ -31,6 +31,26 @@ class UpdateManager(private val context: Context) {
     private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val updateState: StateFlow<UpdateState> = _updateState
 
+    private val _diagnosticLog = MutableStateFlow<String>("История проверок обновлений отсутствует.")
+    val diagnosticLog: StateFlow<String> = _diagnosticLog
+
+    private suspend fun logDiagnostic(message: String) {
+        withContext(Dispatchers.Main) {
+            val timestamp = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date())
+            val existing = _diagnosticLog.value
+            val entry = "[$timestamp] $message"
+            _diagnosticLog.value = if (existing == "История проверок обновлений отсутствует." || existing == "Лог очищен.") {
+                entry
+            } else {
+                "$existing\n$entry"
+            }
+        }
+    }
+
+    fun clearDiagnosticLog() {
+        _diagnosticLog.value = "Лог очищен."
+    }
+
     private val client = OkHttpClient()
 
     // Retrieve current version name
@@ -47,19 +67,31 @@ class UpdateManager(private val context: Context) {
         _updateState.value = UpdateState.Checking
         withContext(Dispatchers.IO) {
             try {
+                logDiagnostic("Запуск проверки обновлений. Репозиторий: $owner/$repo")
+                val currentVersion = getCurrentVersion()
+                logDiagnostic("Установленная локально версия: $currentVersion")
+
                 val url = "https://api.github.com/repos/$owner/$repo/releases/latest"
+                logDiagnostic("Запрос к GitHub API Releases: $url")
+                
                 val requestBuilder = Request.Builder()
                     .url(url)
                     .header("User-Agent", "Mozilla/5.0")
                 if (!token.isNullOrEmpty()) {
+                    val maskedToken = if (token.length > 10) token.take(7) + "..." + token.takeLast(4) else "Задан"
+                    logDiagnostic("Используем токен авторизации GitHub: $maskedToken")
                     requestBuilder.header("Authorization", "Bearer $token")
+                } else {
+                    logDiagnostic("Работаем без токена авторизации GitHub.")
                 }
                 
                 var request = requestBuilder.build()
                 var response = client.newCall(request).execute()
                 var actualTokenUsed = token
+                logDiagnostic("Ответ API получен. Код ответа: ${response.code}")
 
                 if (!response.isSuccessful && (response.code == 401 || response.code == 403) && !token.isNullOrEmpty()) {
+                    logDiagnostic("Доступ ограничен (Код: ${response.code}). Пробуем повторно без заголовка Authorization...")
                     response.close()
                     // Retry without Authorization Header because the repository might be public
                     val retryRequestBuilder = Request.Builder()
@@ -68,12 +100,14 @@ class UpdateManager(private val context: Context) {
                     val retryRequest = retryRequestBuilder.build()
                     response = client.newCall(retryRequest).execute()
                     actualTokenUsed = null
+                    logDiagnostic("Ответ на повторный запрос без токена: Код ${response.code}")
                 }
 
                 var isListResponse = false
                 var finalResponse = response
 
                 if (!finalResponse.isSuccessful && finalResponse.code == 404) {
+                    logDiagnostic("Последний релиз не найден (404). Пробуем список релизов /releases...")
                     finalResponse.close()
                     // Fallback to fetch all releases list (for when there are only pre-releases)
                     val listUrl = "https://api.github.com/repos/$owner/$repo/releases"
@@ -85,15 +119,18 @@ class UpdateManager(private val context: Context) {
                     }
                     var listRequest = listRequestBuilder.build()
                     var listResponse = client.newCall(listRequest).execute()
+                    logDiagnostic("Ответ списка релизов: Код ${listResponse.code}")
 
                     if (!listResponse.isSuccessful && (listResponse.code == 401 || listResponse.code == 403) && !actualTokenUsed.isNullOrEmpty()) {
+                        logDiagnostic("Доступ к списку ограничен. Пробуем повторно без токена...")
                         listResponse.close()
                         val retryListRequestBuilder = Request.Builder()
                             .url(listUrl)
                             .header("User-Agent", "Mozilla/5.0")
-                        val retryListRequest = retryListRequestBuilder.build()
-                        listResponse = client.newCall(retryListRequest).execute()
+                        val retryRequest = retryListRequestBuilder.build()
+                        listResponse = client.newCall(retryRequest).execute()
                         actualTokenUsed = null
+                        logDiagnostic("Ответ без токена: Код ${listResponse.code}")
                     }
                     finalResponse = listResponse
                     isListResponse = true
@@ -101,17 +138,22 @@ class UpdateManager(private val context: Context) {
 
                 finalResponse.use { resp ->
                     if (!resp.isSuccessful) {
+                        val errMsg = "HTTP Ошибка: ${resp.code}"
+                        logDiagnostic("Ошибка: $errMsg")
                         _updateState.value = UpdateState.Error("Не удалось получить информацию с GitHub. Код: ${resp.code}")
                         return@withContext
                     }
 
                     val jsonStr = resp.body?.string() ?: ""
                     if (jsonStr.isEmpty()) {
+                        logDiagnostic("Ошибка: тело ответа пустое.")
                         _updateState.value = UpdateState.Error("Пустой ответ от сервера.")
                         return@withContext
                     }
+                    logDiagnostic("Тело ответа успешно прочитано. Длина: ${jsonStr.length} символов.")
 
                     val json = if (isListResponse) {
+                        logDiagnostic("Парсим массив релизов...")
                         val array = org.json.JSONArray(jsonStr)
                         var foundObject: JSONObject? = null
                         for (i in 0 until array.length()) {
@@ -122,27 +164,38 @@ class UpdateManager(private val context: Context) {
                             }
                         }
                         if (foundObject == null) {
+                            logDiagnostic("Ошибка: в массиве релизов не найдено ни одной опубликованной версии.")
                             _updateState.value = UpdateState.Error("В списке релизов GitHub не найдено опубликованных версий.")
                             return@withContext
                         }
                         foundObject
                     } else {
+                        logDiagnostic("Парсим объект релиза...")
                         JSONObject(jsonStr)
                     }
                     val tagName = json.optString("tag_name", "").trim()
                     val releaseName = json.optString("name", "").trim()
-                    val body = json.optString("body", "Нет описания изменений.")
+                    logDiagnostic("Релиз на GitHub. Tag: '$tagName', Name: '$releaseName'")
+                    val rawBody = if (json.isNull("body")) "" else json.optString("body", "").trim()
+                    val body = if (rawBody.isEmpty() || rawBody.equals("null", ignoreCase = true)) {
+                        "Нет описания изменений."
+                    } else {
+                        rawBody
+                    }
                     
                     if (tagName.isEmpty()) {
+                        logDiagnostic("Ошибка: отсутствует tag_name в JSON.")
                         _updateState.value = UpdateState.Error("Не найден тег версии в релизе.")
                         return@withContext
                     }
 
                     // Extract the clean version from either tag_name or release name
                     val cleanLatestVersion = extractVersion(tagName, releaseName)
+                    logDiagnostic("Извлеченная чистая версия релиза: '$cleanLatestVersion'")
 
                     // Find APK asset
                     val assetsArray = json.optJSONArray("assets")
+                    logDiagnostic("Анализируем активы (assets) релиза. Количество: ${assetsArray?.length() ?: 0}")
                     var downloadUrl = ""
                     if (assetsArray != null) {
                         for (i in 0 until assetsArray.length()) {
@@ -154,25 +207,31 @@ class UpdateManager(private val context: Context) {
                                 } else {
                                     asset.optString("browser_download_url", "")
                                 }
+                                logDiagnostic("Найден подходящий APK-файл: '$name'. URL: $downloadUrl")
                                 break
                             }
                         }
                     }
 
                     if (downloadUrl.isEmpty()) {
+                        logDiagnostic("Ошибка: в релизе GitHub не найден файл APK.")
                         _updateState.value = UpdateState.Error("В последнем релизе GitHub не найден файл APK.")
                         return@withContext
                     }
 
-                    val currentVersion = getCurrentVersion()
-                    if (isNewerVersion(currentVersion, cleanLatestVersion)) {
+                    val isNewer = isNewerVersion(currentVersion, cleanLatestVersion)
+                    logDiagnostic("Анализ версий: установлено '$currentVersion', последнее на сервере '$cleanLatestVersion'. Результат isNewer: $isNewer")
+
+                    if (isNewer) {
                         val displayVersion = if (!cleanLatestVersion.startsWith("v", ignoreCase = true)) "v$cleanLatestVersion" else cleanLatestVersion
+                        logDiagnostic("Итоговое решение: Доступно обновление до $displayVersion")
                         _updateState.value = UpdateState.UpdateAvailable(
                             latestVersion = displayVersion,
                             downloadUrl = downloadUrl,
                             changelog = body
                         )
                     } else {
+                        logDiagnostic("Итоговое решение: Обновление не требуется (версия актуальна).")
                         _updateState.value = UpdateState.UpToDate
                     }
                 }

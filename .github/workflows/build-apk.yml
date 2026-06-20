@@ -35,7 +35,7 @@ jobs:
           ls -la
           if [ -f "debug.keystore.base64" ]; then
             echo "Found debug.keystore.base64! Decoding..."
-            base64 -d debug.keystore.base64 > debug.keystore
+            cat debug.keystore.base64 | tr -d '\r\n ' | base64 -d > debug.keystore
           else
             echo "WARNING: debug.keystore.base64 was NOT found!"
             echo "Creating a fresh debug keystore on the fly using keytool..."
@@ -74,6 +74,9 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add app-installer.apk installer/app-installer.apk app/app-installer.apk app/build.gradle.kts increment_version.py
+          if [ -f "debug.keystore.base64" ]; then
+            git add debug.keystore.base64
+          fi
           if ! git diff-index --quiet HEAD --; then
             git commit -m "chore: auto-update compiled app-installer.apk and bump version to v${{ env.NEW_VERSION_NAME }} [skip ci]"
             git push origin HEAD:${{ github.ref }} || echo "Could not push back to branch (might be protected). Skipping push."

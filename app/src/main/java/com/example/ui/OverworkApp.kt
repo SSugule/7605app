@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -1960,9 +1961,13 @@ fun InfoScreen(isWideScreen: Boolean, viewModel: OverworkViewModel) {
     val pendingCrashDetails by viewModel.pendingCrashDetails.collectAsStateWithLifecycle()
     val crashReportSending by viewModel.crashReportSending.collectAsStateWithLifecycle()
     val crashReportSendStatus by viewModel.crashReportSendStatus.collectAsStateWithLifecycle()
+    val updateDiagnosticLog by viewModel.updateDiagnosticLog.collectAsStateWithLifecycle()
 
     var showAddRuleDialog by remember { mutableStateOf(false) }
     var ruleToEdit by remember { mutableStateOf<DutyRule?>(null) }
+    var manualBugDescription by remember { mutableStateOf("") }
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -2260,6 +2265,284 @@ fun InfoScreen(isWideScreen: Boolean, viewModel: OverworkViewModel) {
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth().testTag("diagnostics_card"),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.BugReport,
+                            contentDescription = "Диагностика",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "🐛 Отчёты об ошибках и диагностика",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
+
+                    // 1. Сведения о версиях и обновлении
+                    Text(
+                        text = "1. Сведения об обновлении",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Установленная версия: v${viewModel.updateManager.getCurrentVersion()}",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            val statusText = when (updateState) {
+                                is UpdateState.Idle -> "Статус: Ожидание"
+                                is UpdateState.Checking -> "Статус: Проверка..."
+                                is UpdateState.UpdateAvailable -> "Статус: Доступно обновление (${(updateState as UpdateState.UpdateAvailable).latestVersion})"
+                                is UpdateState.UpToDate -> "Статус: Установлена актуальная версия"
+                                is UpdateState.Downloading -> "Статус: Загрузка (${String.format(java.util.Locale.US, "%.1f", (updateState as UpdateState.Downloading).progress * 100)}%)"
+                                is UpdateState.ReadyToInstall -> "Статус: Готово к установке"
+                                is UpdateState.Error -> "Статус: Ошибка проверки"
+                                else -> "Статус: Неизвестно"
+                            }
+                            Text(
+                                text = statusText,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = when (updateState) {
+                                    is UpdateState.UpdateAvailable -> MaterialTheme.colorScheme.primary
+                                    is UpdateState.UpToDate -> androidx.compose.ui.graphics.Color(0xFF2E7D32) // green
+                                    is UpdateState.Error -> MaterialTheme.colorScheme.error
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                        }
+
+                        Button(
+                            onClick = { viewModel.checkForUpdates() },
+                            modifier = Modifier.testTag("diag_check_updates_btn"),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Проверить",
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Проверить", fontSize = 12.sp)
+                        }
+                    }
+
+                    // 2. Лог отладчика в реальном времени
+                    Text(
+                        text = "2. Лог процесса обновления (Диагностический лог)",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                            )
+                            .border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                            )
+                            .padding(8.dp)
+                    ) {
+                        val scrollState = rememberScrollState()
+                        Text(
+                            text = updateDiagnosticLog,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(scrollState)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(updateDiagnosticLog))
+                                android.widget.Toast.makeText(context, "Лог скопирован в буфер обмена", android.widget.Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.weight(1f).testTag("diag_copy_log_btn"),
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copy", modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Копировать лог", fontSize = 11.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = { viewModel.clearUpdateDiagnosticLog() },
+                            modifier = Modifier.weight(1f).testTag("diag_clear_log_btn"),
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Delete, contentDescription = "Clear", modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Очистить лог", fontSize = 11.sp)
+                        }
+                    }
+
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "⚠️ Внимание: ошибка 'Приложение не установлено, так как пакет конфликтует...' возникает при несовпадении цифровой подписи (например, при попытке обновить локальную версию сборкой из GitHub релиза). Для исправления удалите текущую версию приложения вручную и установите APK заново.",
+                            fontSize = 10.sp,
+                            modifier = Modifier.padding(8.dp),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
+
+                    // 3. Отчёт об ошибках и краш-репорт
+                    Text(
+                        text = "3. Сбои и сообщения о багах",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    if (hasPendingCrash && pendingCrashDetails != null) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("Найдена запись о недавнем сбое!", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onErrorContainer)
+                                
+                                pendingCrashDetails?.let { details ->
+                                    Text("Время: ${details["timestamp"] ?: "Неизвестно"}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onErrorContainer)
+                                    Text("Исключение: ${details["exception_class"] ?: "Неизвестно"}", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onErrorContainer)
+                                    Text("Сообщение: ${details["exception_message"] ?: "Неизвестно"}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onErrorContainer)
+                                    Text("Контекст: ${details["context_info"] ?: "Неизвестно"}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onErrorContainer)
+                                }
+
+                                if (crashReportSendStatus != null) {
+                                    Text("Статус отправки: $crashReportSendStatus", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = { viewModel.sendPendingCrashReport() },
+                                        enabled = !crashReportSending,
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onError),
+                                        modifier = Modifier.weight(1f).testTag("diag_send_crash_btn")
+                                    ) {
+                                        if (crashReportSending) {
+                                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
+                                        } else {
+                                            Text("Отправить в GitHub", fontSize = 11.sp, color = MaterialTheme.colorScheme.onErrorContainer)
+                                        }
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = { viewModel.clearPendingCrashReport() },
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onErrorContainer),
+                                        modifier = Modifier.weight(1f).testTag("diag_clear_crash_btn")
+                                    ) {
+                                        Text("Удалить отчет", fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "Локально сохранённых отчётов о сбоях не обнаружено.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
+                    }
+
+                    // Ручное создание сообщения о баге
+                    Text(
+                        text = "Отправить ручной отчет о проблеме на GitHub",
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedTextField(
+                        value = manualBugDescription,
+                        onValueChange = { manualBugDescription = it },
+                        modifier = Modifier.fillMaxWidth().testTag("manual_bug_input"),
+                        placeholder = { Text("Опишите возникшую проблему здесь...", fontSize = 12.sp) },
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
+                        maxLines = 4
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                if (manualBugDescription.trim().isNotEmpty()) {
+                                    viewModel.reportHandledError(
+                                        throwable = java.lang.Exception("Пользовательский отчет об ошибке: $manualBugDescription"),
+                                        contextInfo = "Manual user bug report: $manualBugDescription"
+                                    )
+                                    manualBugDescription = ""
+                                    android.widget.Toast.makeText(context, "Отчет отправлен в обработку", android.widget.Toast.LENGTH_SHORT).show()
+                                } else {
+                                    android.widget.Toast.makeText(context, "Пожалуйста, введите описание ошибки", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.weight(1.3f).testTag("send_manual_bug_btn"),
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Send, contentDescription = "Send", modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Отправить багрепорт", fontSize = 11.sp)
+                        }
+
+                        Button(
+                            onClick = {
+                                viewModel.triggerManualCrash()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.weight(0.7f).testTag("diag_test_crash_btn"),
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) {
+                            Text("Сбой приложения", fontSize = 11.sp)
+                        }
                     }
                 }
             }

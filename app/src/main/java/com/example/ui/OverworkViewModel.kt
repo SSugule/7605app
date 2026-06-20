@@ -42,6 +42,11 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
 
     val updateManager = UpdateManager(application)
     val updateState: StateFlow<UpdateState> = updateManager.updateState
+    val updateDiagnosticLog: StateFlow<String> = updateManager.diagnosticLog
+
+    fun clearUpdateDiagnosticLog() {
+        updateManager.clearDiagnosticLog()
+    }
 
     // List of all employees
     val employees: StateFlow<List<Employee>> = repositoryAllEmployeesFlow()
