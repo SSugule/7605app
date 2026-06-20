@@ -57,7 +57,7 @@ jobs:
           chmod +x gradlew
 
       - name: Build and Copy APKs
-        run: ./gradlew assembleDebug copyApkToRoot
+        run: ./gradlew assembleDebug copyApkToRoot --no-configuration-cache
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4

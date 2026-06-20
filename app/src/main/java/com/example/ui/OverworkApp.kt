@@ -2130,70 +2130,17 @@ fun InfoScreen(isWideScreen: Boolean, viewModel: OverworkViewModel) {
                     }
 
                     Text(
-                        text = "Приложение автоматически фиксирует все сбои, вылеты, краши и непредвиденные ошибки. При наличии токена они автоматически отправляются в репозиторий GitHub для своевременного исправления.",
+                        text = "Приложение автоматически фиксирует все сбои, вылеты, краши и непредвиденные ошибки. Они автоматически отправляются в репозиторий GitHub для своевременного исправления.",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    var tokenInput by remember(githubToken) { mutableStateOf(githubToken) }
-                    var showTokenHelp by remember { mutableStateOf(false) }
-
-                    OutlinedTextField(
-                        value = tokenInput,
-                        onValueChange = {
-                            tokenInput = it
-                            viewModel.setGithubToken(it)
-                        },
-                        label = { Text("Личный токен GitHub (PAT)") },
-                        placeholder = { Text("ghp_...") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth().testTag("github_token_input"),
-                        singleLine = true,
-                        trailingIcon = {
-                            IconButton(onClick = { showTokenHelp = !showTokenHelp }) {
-                                Icon(
-                                    imageVector = if (showTokenHelp) Icons.Default.Info else Icons.Default.Help,
-                                    contentDescription = "Справка по токену"
-                                )
-                            }
-                        }
-                    )
-
-                    if (showTokenHelp) {
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(
-                                    text = "Как получить токен?",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = "1. Перейдите в настройки GitHub -> Settings -> Developer Settings -> Personal Access Tokens -> Tokens (classic).\n" +
-                                            "2. Нажмите 'Generate new token' (classic).\n" +
-                                            "3. Укажите имя и выберите права/роль (scope): 'public_repo' (для публичных репозиториев) или 'repo' (для приватных).\n" +
-                                            "4. Скопируйте сгенерированный токен `ghp_...` и вставьте в это поле.",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                                )
-                            }
-                        }
-                    }
-
                     // Show current status of reporting
-                    val statusText = if (githubToken.isNotEmpty()) {
-                        "✅ Автоматическая отправка на GitHub активна"
-                    } else {
-                        "⚠️ Токен не установлен (отчеты сохраняются локально или отправляются через браузер)"
-                    }
                     Text(
-                        text = statusText,
+                        text = "✅ Автоматическая отправка на GitHub активна",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
-                        color = if (githubToken.isNotEmpty()) Emerald600 else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = Emerald600
                     )
 
                     if (hasPendingCrash) {

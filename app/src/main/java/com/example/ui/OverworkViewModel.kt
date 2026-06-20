@@ -34,7 +34,7 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
     // GitHub repository configuration for updates
     val githubOwner = MutableStateFlow(sharedPrefs.getString("github_owner", "super-souls2018") ?: "super-souls2018")
     val githubRepo = MutableStateFlow(sharedPrefs.getString("github_repo", "overwork-journal") ?: "overwork-journal")
-    val githubToken = MutableStateFlow(sharedPrefs.getString("github_token", "") ?: "")
+    val githubToken = MutableStateFlow("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")
     val hasPendingCrash = MutableStateFlow(CrashReporter.hasPendingCrash(application))
     val pendingCrashDetails = MutableStateFlow(CrashReporter.getPendingCrashDetails(application))
     val crashReportSending = MutableStateFlow(false)
