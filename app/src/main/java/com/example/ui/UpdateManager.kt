@@ -54,15 +54,29 @@ class UpdateManager(private val context: Context) {
                 if (!token.isNullOrEmpty()) {
                     requestBuilder.header("Authorization", "Bearer $token")
                 }
-                val request = requestBuilder.build()
+                
+                var request = requestBuilder.build()
+                var response = client.newCall(request).execute()
+                var actualTokenUsed = token
 
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        _updateState.value = UpdateState.Error("Не удалось получить информацию с GitHub. Код: ${response.code}")
+                if (!response.isSuccessful && (response.code == 401 || response.code == 403) && !token.isNullOrEmpty()) {
+                    response.close()
+                    // Retry without Authorization Header because the repository might be public
+                    val retryRequestBuilder = Request.Builder()
+                        .url(url)
+                        .header("User-Agent", "Mozilla/5.0")
+                    val retryRequest = retryRequestBuilder.build()
+                    response = client.newCall(retryRequest).execute()
+                    actualTokenUsed = null
+                }
+
+                response.use { resp ->
+                    if (!resp.isSuccessful) {
+                        _updateState.value = UpdateState.Error("Не удалось получить информацию с GitHub. Код: ${resp.code}")
                         return@withContext
                     }
 
-                    val jsonStr = response.body?.string() ?: ""
+                    val jsonStr = resp.body?.string() ?: ""
                     if (jsonStr.isEmpty()) {
                         _updateState.value = UpdateState.Error("Пустой ответ от сервера.")
                         return@withContext
@@ -85,7 +99,7 @@ class UpdateManager(private val context: Context) {
                             val asset = assetsArray.getJSONObject(i)
                             val name = asset.optString("name", "")
                             if (name.endsWith(".apk")) {
-                                downloadUrl = if (!token.isNullOrEmpty()) {
+                                downloadUrl = if (!actualTokenUsed.isNullOrEmpty()) {
                                     asset.optString("url", "")
                                 } else {
                                     asset.optString("browser_download_url", "")
