@@ -70,7 +70,36 @@ class UpdateManager(private val context: Context) {
                     actualTokenUsed = null
                 }
 
-                response.use { resp ->
+                var isListResponse = false
+                var finalResponse = response
+
+                if (!finalResponse.isSuccessful && finalResponse.code == 404) {
+                    finalResponse.close()
+                    // Fallback to fetch all releases list (for when there are only pre-releases)
+                    val listUrl = "https://api.github.com/repos/$owner/$repo/releases"
+                    val listRequestBuilder = Request.Builder()
+                        .url(listUrl)
+                        .header("User-Agent", "Mozilla/5.0")
+                    if (!actualTokenUsed.isNullOrEmpty()) {
+                        listRequestBuilder.header("Authorization", "Bearer $actualTokenUsed")
+                    }
+                    var listRequest = listRequestBuilder.build()
+                    var listResponse = client.newCall(listRequest).execute()
+
+                    if (!listResponse.isSuccessful && (listResponse.code == 401 || listResponse.code == 403) && !actualTokenUsed.isNullOrEmpty()) {
+                        listResponse.close()
+                        val retryListRequestBuilder = Request.Builder()
+                            .url(listUrl)
+                            .header("User-Agent", "Mozilla/5.0")
+                        val retryListRequest = retryListRequestBuilder.build()
+                        listResponse = client.newCall(retryListRequest).execute()
+                        actualTokenUsed = null
+                    }
+                    finalResponse = listResponse
+                    isListResponse = true
+                }
+
+                finalResponse.use { resp ->
                     if (!resp.isSuccessful) {
                         _updateState.value = UpdateState.Error("Не удалось получить информацию с GitHub. Код: ${resp.code}")
                         return@withContext
@@ -82,7 +111,24 @@ class UpdateManager(private val context: Context) {
                         return@withContext
                     }
 
-                    val json = JSONObject(jsonStr)
+                    val json = if (isListResponse) {
+                        val array = org.json.JSONArray(jsonStr)
+                        var foundObject: JSONObject? = null
+                        for (i in 0 until array.length()) {
+                            val candidate = array.getJSONObject(i)
+                            if (!candidate.optBoolean("draft", false)) {
+                                foundObject = candidate
+                                break
+                            }
+                        }
+                        if (foundObject == null) {
+                            _updateState.value = UpdateState.Error("В списке релизов GitHub не найдено опубликованных версий.")
+                            return@withContext
+                        }
+                        foundObject
+                    } else {
+                        JSONObject(jsonStr)
+                    }
                     val tagName = json.optString("tag_name", "").trim()
                     val body = json.optString("body", "Нет описания изменений.")
                     
@@ -159,12 +205,24 @@ class UpdateManager(private val context: Context) {
 
                 var currentUrl = downloadUrl
                 var requestBuilder = Request.Builder().url(currentUrl)
-                if (!token.isNullOrEmpty() && currentUrl.contains("api.github.com")) {
-                    requestBuilder.header("Authorization", "Bearer $token")
+                var actualTokenUsed = token
+                if (!actualTokenUsed.isNullOrEmpty() && currentUrl.contains("api.github.com")) {
+                    requestBuilder.header("Authorization", "Bearer $actualTokenUsed")
                     requestBuilder.header("Accept", "application/octet-stream")
                 }
                 var request = requestBuilder.build()
                 var response = noRedirectClient.newCall(request).execute()
+
+                if (!response.isSuccessful && (response.code == 401 || response.code == 403) && !actualTokenUsed.isNullOrEmpty()) {
+                    response.close()
+                    actualTokenUsed = null
+                    requestBuilder = Request.Builder().url(currentUrl)
+                    if (currentUrl.contains("api.github.com")) {
+                        requestBuilder.header("Accept", "application/octet-stream")
+                    }
+                    request = requestBuilder.build()
+                    response = noRedirectClient.newCall(request).execute()
+                }
 
                 var redirectsCount = 0
                 while ((response.code == 301 || response.code == 302 || response.code == 303 || response.code == 307 || response.code == 308) && redirectsCount < 5) {
@@ -173,8 +231,8 @@ class UpdateManager(private val context: Context) {
 
                     currentUrl = location
                     requestBuilder = Request.Builder().url(currentUrl)
-                    if (!token.isNullOrEmpty() && currentUrl.contains("api.github.com")) {
-                        requestBuilder.header("Authorization", "Bearer $token")
+                    if (!actualTokenUsed.isNullOrEmpty() && currentUrl.contains("api.github.com")) {
+                        requestBuilder.header("Authorization", "Bearer $actualTokenUsed")
                         requestBuilder.header("Accept", "application/octet-stream")
                     }
                     request = requestBuilder.build()

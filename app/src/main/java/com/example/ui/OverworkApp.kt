@@ -549,7 +549,10 @@ fun EmployeeCard(
                         text = "Переработка: ${formatHours(balance)} ч.",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = Emerald600
+                        color = Emerald600,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -981,13 +984,13 @@ fun JournalScreen(
             modifier = Modifier
                 .padding(horizontal = 16.dp, vertical = 12.dp)
                 .fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             TabRow(
                 selectedTabIndex = viewModeTab,
                 modifier = Modifier
-                    .width(260.dp)
+                    .weight(1f)
                     .clip(RoundedCornerShape(8.dp)),
                 containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
                 divider = {},
@@ -1032,7 +1035,13 @@ fun JournalScreen(
             ) {
                 Icon(Icons.Default.AddCircle, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Запись", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "Запись",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    softWrap = false
+                )
             }
         }
 
@@ -2076,158 +2085,7 @@ fun InfoScreen(isWideScreen: Boolean, viewModel: OverworkViewModel) {
             }
         }
 
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.BugReport,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                        Text(
-                            text = "Отчеты об ошибках и сбоях",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
 
-                    Text(
-                        text = "Приложение автоматически фиксирует все сбои, вылеты, краши и непредвиденные ошибки. Они автоматически отправляются в репозиторий GitHub для своевременного исправления.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    // Show current status of reporting
-                    Text(
-                        text = "✅ Автоматическая отправка на GitHub активна",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Emerald600
-                    )
-
-                    if (hasPendingCrash) {
-                        val details = pendingCrashDetails
-                        val contextObj = LocalContext.current
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Warning,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
-                                    Text(
-                                        text = "Предыдущая сессия завершилась ошибкой!",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = MaterialTheme.colorScheme.error
-                                    )
-                                }
-
-                                if (details != null) {
-                                    Text(text = "Ошибка: ${details["exception_class"]}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                                    Text(text = "Сообщение: ${details["exception_message"]}", fontSize = 11.sp)
-                                    Text(text = "Время сбоя: ${details["timestamp"]}", fontSize = 11.sp)
-                                    Text(text = "Устройство: ${details["device"]}", fontSize = 11.sp)
-                                    if (!details["context_info"].isNullOrBlank()) {
-                                        Text(text = "Контекст: ${details["context_info"]}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    if (githubToken.isNotEmpty()) {
-                                        Button(
-                                            onClick = { viewModel.sendPendingCrashReport() },
-                                            enabled = !crashReportSending,
-                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                                            modifier = Modifier.weight(1f)
-                                        ) {
-                                            if (crashReportSending) {
-                                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.onError, strokeWidth = 2.dp)
-                                            } else {
-                                                Text("Отправить в GitHub", fontSize = 11.sp)
-                                            }
-                                        }
-                                    } else {
-                                        Button(
-                                            onClick = {
-                                                if (details != null) {
-                                                    // Manual submission via browser.
-                                                    val urlText = "https://github.com/${githubOwner}/${githubRepo}/issues/new?" +
-                                                            "title=" + Uri.encode("[Bug/Crash Report] ${details["exception_class"]}: ${details["exception_message"]}") +
-                                                            "&body=" + Uri.encode(
-                                                                "## App Error Report (Manual Submission)\n\n" +
-                                                                "**Time:** ${details["timestamp"]}\n" +
-                                                                "**Version:** v${details["app_version"]}\n" +
-                                                                "**Device:** ${details["device"]}\n" +
-                                                                "**Context:** ${details["context_info"]}\n\n" +
-                                                                "### Stack Trace:\n```\n${details["stack_trace"]}\n```"
-                                                            )
-                                                    try {
-                                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(urlText))
-                                                        contextObj.startActivity(intent)
-                                                    } catch (e: Exception) {
-                                                        // Fallback
-                                                    }
-                                                }
-                                            },
-                                            modifier = Modifier.weight(1f)
-                                        ) {
-                                            Text("Отправить вручную", fontSize = 11.sp)
-                                        }
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = { viewModel.clearPendingCrashReport() },
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Text("Очистить", fontSize = 11.sp)
-                                    }
-                                }
-
-                                if (crashReportSendStatus != null) {
-                                    Text(
-                                        text = crashReportSendStatus ?: "",
-                                        fontSize = 11.sp,
-                                        color = if (crashReportSendStatus!!.startsWith("Успех")) Emerald600 else MaterialTheme.colorScheme.error,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(top = 4.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // Test trigger button
-                    OutlinedButton(
-                        onClick = { viewModel.triggerManualCrash() },
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                        modifier = Modifier.fillMaxWidth().testTag("test_crash_btn")
-                    ) {
-                        Icon(imageVector = Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Имитировать сбой (для проверки сбора)")
-                    }
-                }
-            }
-        }
 
         if (isWideScreen) {
             item {
