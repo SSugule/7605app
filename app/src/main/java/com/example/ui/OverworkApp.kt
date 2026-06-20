@@ -2102,7 +2102,7 @@ fun InfoScreen(isWideScreen: Boolean, viewModel: OverworkViewModel) {
                     ) {
                         Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Проверить обновления сейчас")
+                        Text("Проверить обновления")
                     }
                 }
             }

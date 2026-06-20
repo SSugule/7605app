@@ -130,12 +130,16 @@ class UpdateManager(private val context: Context) {
                         JSONObject(jsonStr)
                     }
                     val tagName = json.optString("tag_name", "").trim()
+                    val releaseName = json.optString("name", "").trim()
                     val body = json.optString("body", "Нет описания изменений.")
                     
                     if (tagName.isEmpty()) {
                         _updateState.value = UpdateState.Error("Не найден тег версии в релизе.")
                         return@withContext
                     }
+
+                    // Extract the clean version from either tag_name or release name
+                    val cleanLatestVersion = extractVersion(tagName, releaseName)
 
                     // Find APK asset
                     val assetsArray = json.optJSONArray("assets")
@@ -161,9 +165,10 @@ class UpdateManager(private val context: Context) {
                     }
 
                     val currentVersion = getCurrentVersion()
-                    if (isNewerVersion(currentVersion, tagName)) {
+                    if (isNewerVersion(currentVersion, cleanLatestVersion)) {
+                        val displayVersion = if (!cleanLatestVersion.startsWith("v", ignoreCase = true)) "v$cleanLatestVersion" else cleanLatestVersion
                         _updateState.value = UpdateState.UpdateAvailable(
-                            latestVersion = tagName,
+                            latestVersion = displayVersion,
                             downloadUrl = downloadUrl,
                             changelog = body
                         )
@@ -177,12 +182,38 @@ class UpdateManager(private val context: Context) {
         }
     }
 
+    private fun extractVersion(tag: String, name: String): String {
+        val versionRegex = """v?(\d+\.\d+\.\d+)""".toRegex(RegexOption.IGNORE_CASE)
+        
+        // Try to match in name first if we have a tag named 'latest'
+        if (tag.equals("latest", ignoreCase = true)) {
+            val match = versionRegex.find(name)
+            if (match != null) {
+                return match.groupValues[1]
+            }
+        }
+        
+        // Try tag_name
+        val matchTag = versionRegex.find(tag)
+        if (matchTag != null) {
+            return matchTag.groupValues[1]
+        }
+        
+        // Fallback to name
+        val matchName = versionRegex.find(name)
+        if (matchName != null) {
+            return matchName.groupValues[1]
+        }
+        
+        return tag
+    }
+
     private fun isNewerVersion(current: String, latest: String): Boolean {
         val currClean = current.replace("v", "", ignoreCase = true).trim()
         val latClean = latest.replace("v", "", ignoreCase = true).trim()
         
-        val currParts = currClean.split(".").mapNotNull { it.toIntOrNull() }
-        val latParts = latClean.split(".").mapNotNull { it.toIntOrNull() }
+        val currParts = currClean.split(".").map { it.filter { c -> c.isDigit() } }.map { it.toIntOrNull() ?: 0 }
+        val latParts = latClean.split(".").map { it.filter { c -> c.isDigit() } }.map { it.toIntOrNull() ?: 0 }
 
         val size = maxOf(currParts.size, latParts.size)
         for (i in 0 until size) {
