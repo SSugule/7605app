@@ -117,20 +117,28 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
             }
         }
 
-        // Prepopulate default duty rules if database is empty
+        // Prepopulate or update default duty rules descriptions to match their names
         viewModelScope.launch {
             repository.allDutyRules.take(1).collect { existingRules ->
+                val defaultRules = listOf(
+                    DutyRule("Р", "Рабочий день", "Рабочий день", 7.0, 4.0, false),
+                    DutyRule("ВГ", "Наряд ВГ", "Наряд ВГ", 30.0, 29.0, false),
+                    DutyRule("П1", "Наряд П1", "Наряд П1", 30.0, 29.0, false),
+                    DutyRule("Ф", "Наряд Ф", "Наряд Ф", 28.0, 27.0, false),
+                    DutyRule("В", "Выходной", "Выходной", 0.0, 0.0, true),
+                    DutyRule("—", "Послесуточный отдых", "Послесуточный отдых", 0.0, 0.0, true)
+                )
                 if (existingRules.isEmpty()) {
-                    val defaultRules = listOf(
-                        DutyRule("Р", "Рабочий день", "Рабочий день сверх продолжительности. В будни — 7 ч, в праздники — 4 ч.", 7.0, 4.0, false),
-                        DutyRule("ВГ", "Наряд ВГ", "Наряд ВГ. Стандартный суточный караул. В будни — 30 ч, в праздники — 29 ч.", 30.0, 29.0, false),
-                        DutyRule("П1", "Наряд П1", "Наряд П1. Суточный наряд. В будни — 30 ч, в праздники — 29 ч.", 30.0, 29.0, false),
-                        DutyRule("Ф", "Наряд Ф", "Наряд Ф. Суточный наряд. В будни — 28 ч, в праздники — 27 ч.", 28.0, 27.0, false),
-                        DutyRule("В", "Выходной", "Выходной день. 0 ч работы, 8 ч отдыха.", 0.0, 0.0, true),
-                        DutyRule("—", "Послесуточный отдых", "Выходной день после суточного наряда (после суточного дежурства). 0 ч работы.", 0.0, 0.0, true)
-                    )
                     defaultRules.forEach {
                         repository.insertDutyRule(it)
+                    }
+                } else {
+                    // Update default rules description and name to match if they differ
+                    defaultRules.forEach { defaultRule ->
+                        val existing = existingRules.find { it.symbol == defaultRule.symbol }
+                        if (existing != null && (existing.description != defaultRule.description || existing.name != defaultRule.name)) {
+                            repository.insertDutyRule(existing.copy(name = defaultRule.name, description = defaultRule.description))
+                        }
                     }
                 }
             }
