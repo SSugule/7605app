@@ -43,15 +43,18 @@ class UpdateManager(private val context: Context) {
         }
     }
 
-    suspend fun checkForUpdates(owner: String, repo: String) {
+    suspend fun checkForUpdates(owner: String, repo: String, token: String? = null) {
         _updateState.value = UpdateState.Checking
         withContext(Dispatchers.IO) {
             try {
                 val url = "https://api.github.com/repos/$owner/$repo/releases/latest"
-                val request = Request.Builder()
+                val requestBuilder = Request.Builder()
                     .url(url)
                     .header("User-Agent", "Mozilla/5.0")
-                    .build()
+                if (!token.isNullOrEmpty()) {
+                    requestBuilder.header("Authorization", "Bearer $token")
+                }
+                val request = requestBuilder.build()
 
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
@@ -82,7 +85,11 @@ class UpdateManager(private val context: Context) {
                             val asset = assetsArray.getJSONObject(i)
                             val name = asset.optString("name", "")
                             if (name.endsWith(".apk")) {
-                                downloadUrl = asset.optString("browser_download_url", "")
+                                downloadUrl = if (!token.isNullOrEmpty()) {
+                                    asset.optString("url", "")
+                                } else {
+                                    asset.optString("browser_download_url", "")
+                                }
                                 break
                             }
                         }
@@ -127,49 +134,78 @@ class UpdateManager(private val context: Context) {
         return false
     }
 
-    suspend fun downloadAndInstall(downloadUrl: String) {
+    suspend fun downloadAndInstall(downloadUrl: String, token: String? = null) {
         _updateState.value = UpdateState.Downloading(0f)
         withContext(Dispatchers.IO) {
             try {
-                val request = Request.Builder().url(downloadUrl).build()
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        _updateState.value = UpdateState.Error("Не удалось скачать APK. Код: ${response.code}")
-                        return@withContext
-                    }
+                val noRedirectClient = client.newBuilder()
+                    .followRedirects(false)
+                    .followSslRedirects(false)
+                    .build()
 
-                    val body = response.body
-                    if (body == null) {
-                        _updateState.value = UpdateState.Error("Тело ответа пустое.")
-                        return@withContext
-                    }
+                var currentUrl = downloadUrl
+                var requestBuilder = Request.Builder().url(currentUrl)
+                if (!token.isNullOrEmpty() && currentUrl.contains("api.github.com")) {
+                    requestBuilder.header("Authorization", "Bearer $token")
+                    requestBuilder.header("Accept", "application/octet-stream")
+                }
+                var request = requestBuilder.build()
+                var response = noRedirectClient.newCall(request).execute()
 
-                    val totalBytes = body.contentLength()
-                    // Save to external files or cache dir
-                    val apkFile = File(context.cacheDir, "app-update.apk")
-                    if (apkFile.exists()) {
-                        apkFile.delete()
-                    }
+                var redirectsCount = 0
+                while ((response.code == 301 || response.code == 302 || response.code == 303 || response.code == 307 || response.code == 308) && redirectsCount < 5) {
+                    val location = response.header("Location") ?: break
+                    response.close()
 
-                    body.byteStream().use { input ->
-                        FileOutputStream(apkFile).use { output ->
-                            val buffer = ByteArray(8192)
-                            var bytesRead: Int
-                            var downloadedBytes = 0L
-                            
-                            while (input.read(buffer).also { bytesRead = it } != -1) {
-                                output.write(buffer, 0, bytesRead)
-                                downloadedBytes += bytesRead
-                                if (totalBytes > 0) {
-                                    val progress = downloadedBytes.toFloat() / totalBytes
-                                    _updateState.value = UpdateState.Downloading(progress)
-                                }
+                    currentUrl = location
+                    requestBuilder = Request.Builder().url(currentUrl)
+                    if (!token.isNullOrEmpty() && currentUrl.contains("api.github.com")) {
+                        requestBuilder.header("Authorization", "Bearer $token")
+                        requestBuilder.header("Accept", "application/octet-stream")
+                    }
+                    request = requestBuilder.build()
+                    response = noRedirectClient.newCall(request).execute()
+                    redirectsCount++
+                }
+
+                if (!response.isSuccessful) {
+                    _updateState.value = UpdateState.Error("Не удалось скачать APK. Код: ${response.code}")
+                    response.close()
+                    return@withContext
+                }
+
+                val body = response.body
+                if (body == null) {
+                    _updateState.value = UpdateState.Error("Тело ответа пустое.")
+                    response.close()
+                    return@withContext
+                }
+
+                val totalBytes = body.contentLength()
+                val apkFile = File(context.cacheDir, "app-update.apk")
+                if (apkFile.exists()) {
+                    apkFile.delete()
+                }
+
+                body.byteStream().use { input ->
+                    FileOutputStream(apkFile).use { output ->
+                        val buffer = ByteArray(8192)
+                        var bytesRead: Int
+                        var downloadedBytes = 0L
+                        
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            output.write(buffer, 0, bytesRead)
+                            downloadedBytes += bytesRead
+                            if (totalBytes > 0) {
+                                val progress = downloadedBytes.toFloat() / totalBytes
+                                _updateState.value = UpdateState.Downloading(progress)
                             }
                         }
                     }
-
-                    _updateState.value = UpdateState.ReadyToInstall(apkFile)
                 }
+                response.close()
+
+                _updateState.value = UpdateState.ReadyToInstall(apkFile)
             } catch (e: Exception) {
                 _updateState.value = UpdateState.Error("Ошибка при скачивании: ${e.localizedMessage}")
             }

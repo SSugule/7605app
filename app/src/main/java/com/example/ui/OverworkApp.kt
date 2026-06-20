@@ -1981,8 +1981,6 @@ fun InfoScreen(isWideScreen: Boolean, viewModel: OverworkViewModel) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    var ownerInput by remember(githubOwner) { mutableStateOf(githubOwner) }
-                    var repoInput by remember(githubRepo) { mutableStateOf(githubRepo) }
                     val currentAppVersion = viewModel.getAppVersion()
 
                     Row(
@@ -2006,34 +2004,6 @@ fun InfoScreen(isWideScreen: Boolean, viewModel: OverworkViewModel) {
                     }
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
-
-                    Text("Репозиторий обновлений на GitHub:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = ownerInput,
-                            onValueChange = {
-                                ownerInput = it
-                                viewModel.setGithubConfig(it, repoInput)
-                            },
-                            label = { Text("Владелец (Owner)") },
-                            modifier = Modifier.weight(1f).testTag("update_owner_input"),
-                            singleLine = true
-                        )
-                        OutlinedTextField(
-                            value = repoInput,
-                            onValueChange = {
-                                repoInput = it
-                                viewModel.setGithubConfig(ownerInput, it)
-                            },
-                            label = { Text("Репозиторий (Repo)") },
-                            modifier = Modifier.weight(1f).testTag("update_repo_input"),
-                            singleLine = true
-                        )
-                    }
 
                     when (val state = updateState) {
                         is UpdateState.Checking -> {

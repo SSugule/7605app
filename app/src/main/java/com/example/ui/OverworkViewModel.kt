@@ -31,9 +31,9 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
     private val repository: OverworkRepository = OverworkRepository(OverworkDatabase.getDatabase(application).overworkDao())
     private val sharedPrefs = application.getSharedPreferences("overwork_journal_prefs", Context.MODE_PRIVATE)
 
-    // GitHub repository configuration for updates
-    val githubOwner = MutableStateFlow(sharedPrefs.getString("github_owner", "super-souls2018") ?: "super-souls2018")
-    val githubRepo = MutableStateFlow(sharedPrefs.getString("github_repo", "overwork-journal") ?: "overwork-journal")
+    // GitHub repository configuration for updates (hardcoded as requested)
+    val githubOwner = MutableStateFlow("SSugule")
+    val githubRepo = MutableStateFlow("7605app")
     val githubToken = MutableStateFlow("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")
     val hasPendingCrash = MutableStateFlow(CrashReporter.hasPendingCrash(application))
     val pendingCrashDetails = MutableStateFlow(CrashReporter.getPendingCrashDetails(application))
@@ -108,7 +108,7 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
         }
 
         viewModelScope.launch {
-            updateManager.checkForUpdates(githubOwner.value, githubRepo.value)
+            updateManager.checkForUpdates(githubOwner.value, githubRepo.value, githubToken.value)
         }
 
         viewModelScope.launch {
@@ -350,22 +350,11 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun setGithubConfig(owner: String, repo: String) {
-        githubOwner.value = owner.trim()
-        githubRepo.value = repo.trim()
-        sharedPrefs.edit()
-            .putString("github_owner", owner.trim())
-            .putString("github_repo", repo.trim())
-            .apply()
+        // No-op to prevent tampering with hardcoded configuration
     }
 
     fun setGithubToken(token: String) {
-        githubToken.value = token.trim()
-        sharedPrefs.edit().putString("github_token", token.trim()).apply()
-        
-        // Auto-submit crash if they just inputted a valid token
-        if (hasPendingCrash.value && token.trim().isNotEmpty()) {
-            sendPendingCrashReport()
-        }
+        // No-op to prevent tampering with hardcoded PAT
     }
 
     fun clearPendingCrashReport() {
@@ -477,13 +466,13 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
 
     fun checkForUpdates() {
         viewModelScope.launch {
-            updateManager.checkForUpdates(githubOwner.value, githubRepo.value)
+            updateManager.checkForUpdates(githubOwner.value, githubRepo.value, githubToken.value)
         }
     }
 
     fun downloadAndInstallUpdate(downloadUrl: String) {
         viewModelScope.launch {
-            updateManager.downloadAndInstall(downloadUrl)
+            updateManager.downloadAndInstall(downloadUrl, githubToken.value)
         }
     }
 
