@@ -14,8 +14,8 @@ android {
     applicationId = "com.aistudio.overworkjournal.kqyzxw"
     minSdk = 26
     targetSdk = 34
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = 39
+    versionName = "1.0.4"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
