@@ -492,6 +492,7 @@ fun EmployeeCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    var showConfirmDelete by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -519,7 +520,7 @@ fun EmployeeCard(
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = employee.name,
@@ -542,12 +543,12 @@ fun EmployeeCard(
                         imageVector = Icons.Default.EventAvailable,
                         contentDescription = null,
                         tint = Emerald500,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(15.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "Переработка: ${formatHours(balance)} ч.",
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Emerald600,
                         maxLines = 1,
@@ -556,15 +557,38 @@ fun EmployeeCard(
                     )
                 }
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            Row {
-                IconButton(onClick = onEdit, modifier = Modifier.testTag("edit_employee_${employee.id}")) {
-                    Icon(Icons.Default.Edit, contentDescription = "Редактировать", tint = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.width(4.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onEdit,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .testTag("edit_employee_${employee.id}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Редактировать",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
-                var showConfirmDelete by remember { mutableStateOf(false) }
-                IconButton(onClick = { showConfirmDelete = true }, modifier = Modifier.testTag("delete_employee_${employee.id}")) {
-                    Icon(Icons.Default.Delete, contentDescription = "Удалить", tint = Rose500)
+                IconButton(
+                    onClick = { showConfirmDelete = true },
+                    modifier = Modifier
+                        .size(36.dp)
+                        .testTag("delete_employee_${employee.id}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Удалить",
+                        tint = Rose500,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
+            }
 
                 if (showConfirmDelete) {
                     AlertDialog(
@@ -588,7 +612,6 @@ fun EmployeeCard(
             }
         }
     }
-}
 
 // --- Create/Edit Employee Dialog ---
 @Composable

@@ -80,15 +80,34 @@ jobs:
           else
             echo "No changes to APK files. Skipping commit."
           fi
+          
+          # Generate and push a git tag for the new semantic version
+          if [ "${{ github.ref_name }}" = "main" ] || [ "${{ github.ref_name }}" = "master" ]; then
+            echo "Tagging commit with v${{ env.NEW_VERSION_NAME }}..."
+            git tag -f "v${{ env.NEW_VERSION_NAME }}"
+            git push -f origin "v${{ env.NEW_VERSION_NAME }}" || echo "Failed to push tag v${{ env.NEW_VERSION_NAME }}"
+          fi
 
-      - name: Create or Update GitHub Release
+      - name: Create Semantic Version Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref_name == 'main' || github.ref_name == 'master'
+        with:
+          tag_name: "v${{ env.NEW_VERSION_NAME }}"
+          name: "Release v${{ env.NEW_VERSION_NAME }}"
+          draft: false
+          prerelease: false
+          files: app-installer.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Latest Release
         uses: softprops/action-gh-release@v2
         if: github.ref_name == 'main' || github.ref_name == 'master'
         with:
           tag_name: latest
           name: "Latest Build v${{ env.NEW_VERSION_NAME }}"
           draft: false
-          prerelease: true
+          prerelease: false
           files: app-installer.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
