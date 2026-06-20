@@ -30,11 +30,25 @@ jobs:
 
       - name: Decode Keystore
         run: |
+          echo "Current directory: $(pwd)"
+          echo "Listing all files in workspace:"
+          ls -la
           if [ -f "debug.keystore.base64" ]; then
+            echo "Found debug.keystore.base64! Decoding..."
             base64 -d debug.keystore.base64 > debug.keystore
-            echo "Keystore successfully decoded!"
           else
-            echo "Warning: debug.keystore.base64 not found!"
+            echo "WARNING: debug.keystore.base64 was NOT found!"
+            echo "Creating a fresh debug keystore on the fly using keytool..."
+            keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          
+          echo "Checking if debug.keystore exists after decode/generation:"
+          if [ -f "debug.keystore" ]; then
+            echo "SUCCESS: debug.keystore is ready!"
+            ls -la debug.keystore
+          else
+            echo "ERROR: debug.keystore could not be resolved!"
+            exit 1
           fi
 
       - name: Regenerate Gradle Wrapper (Fix corrupt JAR)

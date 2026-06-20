@@ -34,6 +34,11 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
     // GitHub repository configuration for updates
     val githubOwner = MutableStateFlow(sharedPrefs.getString("github_owner", "super-souls2018") ?: "super-souls2018")
     val githubRepo = MutableStateFlow(sharedPrefs.getString("github_repo", "overwork-journal") ?: "overwork-journal")
+    val githubToken = MutableStateFlow(sharedPrefs.getString("github_token", "") ?: "")
+    val hasPendingCrash = MutableStateFlow(CrashReporter.hasPendingCrash(application))
+    val pendingCrashDetails = MutableStateFlow(CrashReporter.getPendingCrashDetails(application))
+    val crashReportSending = MutableStateFlow(false)
+    val crashReportSendStatus = MutableStateFlow<String?>(null)
 
     val updateManager = UpdateManager(application)
     val updateState: StateFlow<UpdateState> = updateManager.updateState
@@ -352,12 +357,6 @@ class OverworkViewModel(application: Application) : AndroidViewModel(application
             .putString("github_repo", repo.trim())
             .apply()
     }
-
-    val githubToken = MutableStateFlow(sharedPrefs.getString("github_token", "") ?: "")
-    val hasPendingCrash = MutableStateFlow(CrashReporter.hasPendingCrash(application))
-    val pendingCrashDetails = MutableStateFlow(CrashReporter.getPendingCrashDetails(application))
-    val crashReportSending = MutableStateFlow(false)
-    val crashReportSendStatus = MutableStateFlow<String?>(null)
 
     fun setGithubToken(token: String) {
         githubToken.value = token.trim()

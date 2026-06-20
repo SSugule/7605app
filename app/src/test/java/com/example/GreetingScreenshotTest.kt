@@ -1,8 +1,11 @@
 package com.example
 
+import android.app.Application
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.test.core.app.ApplicationProvider
 import com.example.ui.InfoScreen
+import com.example.ui.OverworkViewModel
 import com.example.ui.theme.MyApplicationTheme
 import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -22,7 +25,9 @@ class GreetingScreenshotTest {
 
   @Test
   fun greeting_screenshot() {
-    composeTestRule.setContent { MyApplicationTheme { InfoScreen(isWideScreen = false) } }
+    val application = ApplicationProvider.getApplicationContext<Application>()
+    val viewModel = OverworkViewModel(application)
+    composeTestRule.setContent { MyApplicationTheme { InfoScreen(isWideScreen = false, viewModel = viewModel) } }
 
     composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/info_screen.png")
   }
