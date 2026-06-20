@@ -56,6 +56,10 @@ jobs:
           gradle wrapper
           chmod +x gradlew
 
+      - name: Auto-increment Version (Semantic Patch)
+        run: |
+          python3 increment_version.py
+
       - name: Build and Copy APKs
         run: ./gradlew assembleDebug copyApkToRoot --no-configuration-cache
 
@@ -69,9 +73,9 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add app-installer.apk installer/app-installer.apk app/app-installer.apk
+          git add app-installer.apk installer/app-installer.apk app/app-installer.apk app/build.gradle.kts increment_version.py
           if ! git diff-index --quiet HEAD --; then
-            git commit -m "chore: auto-update compiled app-installer.apk [skip ci]"
+            git commit -m "chore: auto-update compiled app-installer.apk and bump version to v${{ env.NEW_VERSION_NAME }} [skip ci]"
             git push origin HEAD:${{ github.ref }} || echo "Could not push back to branch (might be protected). Skipping push."
           else
             echo "No changes to APK files. Skipping commit."
@@ -82,7 +86,7 @@ jobs:
         if: github.ref_name == 'main' || github.ref_name == 'master'
         with:
           tag_name: latest
-          name: Latest Build
+          name: "Latest Build v${{ env.NEW_VERSION_NAME }}"
           draft: false
           prerelease: true
           files: app-installer.apk
